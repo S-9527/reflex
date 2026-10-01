@@ -41,19 +41,49 @@ const GROUPS = [
 ];
 
 /**
+ * 降级名单:从第 1 关挪到第 9 关的键。
+ *
+ * 抽出来单独放,是为了能被 tests/dataset.test.ts 断言 ——
+ * 分级是最容易被"重跑脚本 + 手改排序"悄悄改坏的东西。
+ */
+export const DEMOTED = {
+  // 窗口调整大小:书 9.3.5 说该配计数用或直接拖鼠标,裸按没意义
+  "<C-Up>": 9,
+  "<C-Down>": 9,
+  "<C-Left>": 9,
+  "<C-Right>": 9,
+};
+
+/**
  * 没有 leader 前缀的键(裸键)分组。
  *
  * ⚠️ 窗口键是重点:你机器上 LazyVim 16 已经**不教** `<C-w>h/j/k/l` 了,
- * 换成了 `<C-H/J/K/L>` 导航 + `<C-W>` 进 Hydra。实测 13 条,见下。
- * 所以窗口组必须同时收 leader 版和 Ctrl 版,否则你的弱项练不到。
+ * 换成了 `<C-H/J/K/L>` 导航。所以窗口组必须同时收 leader 版和 Ctrl 版。
  */
-const CTRL_WINDOW = new Set([
-  "<C-H>", "<C-J>", "<C-K>", "<C-L>", // 切换窗口
-  "<C-Up>", "<C-Down>", "<C-Left>", "<C-Right>", // 调整大小
+const CTRL_WINDOW_NAV = new Set([
+  "<C-H>", "<C-J>", "<C-K>", "<C-L>", // 切换窗口 —— 每次多窗口都用
+]);
+
+/**
+ * 调整大小的 4 条。降级到第 9 关(和插件管理同级)。
+ *
+ * ## 为什么降级而不是删掉
+ *
+ * 用户自己提的判断,并且书支持:
+ * - 书 9.3.5 原话:「the easiest way to resize Vim splits is to use… *the mouse*」
+ * - 同一节还说键盘方式「只移动一行或一列,所以你几乎肯定要
+ *   **在前面加一个大于 10 的计数**」—— 也就是裸按没意义
+ * - 裸按 `<C-Up>` 挪一行,真实场景要的是 `20<C-Up>`
+ *
+ * 删掉的话以后真要用还得回来查。留在题库第 9 关,不打���核心关卡。
+ */
+const CTRL_WINDOW_RESIZE = new Set([
+  "<C-Up>", "<C-Down>", "<C-Left>", "<C-Right>",
 ]);
 
 function classifyBare(lhs) {
-  if (CTRL_WINDOW.has(lhs)) return { key: "window", label: "窗口", level: 1 };
+  if (CTRL_WINDOW_NAV.has(lhs)) return { key: "window", label: "窗口", level: 1 };
+  if (CTRL_WINDOW_RESIZE.has(lhs)) return { key: "window-resize", label: "窗口调整大小", level: 9 };
   if (/^<C-[bB]/.test(lhs)) return { key: "ctrl-b", label: "Ctrl-b 系列", level: 5 };
   if (/^</.test(lhs)) return { key: "special", label: "特殊键", level: 6 };
   if (/^[A-Z]/.test(lhs)) return { key: "upper", label: "大写键", level: 3 };

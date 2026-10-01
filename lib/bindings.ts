@@ -23,6 +23,7 @@ export const GROUPS: Record<string, string> = {
   "code": "代码 / LSP",
   "search": "搜索替换",
   "ui": "界面",
+  "window-resize": "窗口调整大小",
   "leader-other": "其他 leader 键",
 };
 
@@ -35,21 +36,11 @@ export const LEVEL_NAMES: Record<number, string> = {
   6: "第 6 关",
   7: "第 7 关",
   8: "第 8 关",
+  9: "第 9 关",
   10: "第 10 关",
 };
 
 export const RAW: Omit<Binding, "keys">[] = [
- {
-  "id": "n:<C-Down>",
-  "display": "<C-Down>",
-  "label": "Decrease Window Height",
-  "desc": "Decrease Window Height",
-  "mode": "n",
-  "group": "window",
-  "groupLabel": "窗口",
-  "level": 1,
-  "status": "mapped"
- },
  {
   "id": "n:<C-H>",
   "display": "<C-H>",
@@ -88,39 +79,6 @@ export const RAW: Omit<Binding, "keys">[] = [
   "display": "<C-L>",
   "label": "Go to Right Window",
   "desc": "Go to Right Window",
-  "mode": "n",
-  "group": "window",
-  "groupLabel": "窗口",
-  "level": 1,
-  "status": "mapped"
- },
- {
-  "id": "n:<C-Left>",
-  "display": "<C-Left>",
-  "label": "Decrease Window Width",
-  "desc": "Decrease Window Width",
-  "mode": "n",
-  "group": "window",
-  "groupLabel": "窗口",
-  "level": 1,
-  "status": "mapped"
- },
- {
-  "id": "n:<C-Right>",
-  "display": "<C-Right>",
-  "label": "Increase Window Width",
-  "desc": "Increase Window Width",
-  "mode": "n",
-  "group": "window",
-  "groupLabel": "窗口",
-  "level": 1,
-  "status": "mapped"
- },
- {
-  "id": "n:<C-Up>",
-  "display": "<C-Up>",
-  "label": "Increase Window Height",
-  "desc": "Increase Window Height",
   "mode": "n",
   "group": "window",
   "groupLabel": "窗口",
@@ -2864,6 +2822,50 @@ export const RAW: Omit<Binding, "keys">[] = [
   "group": "ui",
   "groupLabel": "界面",
   "level": 8,
+  "status": "mapped"
+ },
+ {
+  "id": "n:<C-Down>",
+  "display": "<C-Down>",
+  "label": "Decrease Window Height",
+  "desc": "Decrease Window Height",
+  "mode": "n",
+  "group": "window-resize",
+  "groupLabel": "窗口调整大小",
+  "level": 9,
+  "status": "mapped"
+ },
+ {
+  "id": "n:<C-Left>",
+  "display": "<C-Left>",
+  "label": "Decrease Window Width",
+  "desc": "Decrease Window Width",
+  "mode": "n",
+  "group": "window-resize",
+  "groupLabel": "窗口调整大小",
+  "level": 9,
+  "status": "mapped"
+ },
+ {
+  "id": "n:<C-Right>",
+  "display": "<C-Right>",
+  "label": "Increase Window Width",
+  "desc": "Increase Window Width",
+  "mode": "n",
+  "group": "window-resize",
+  "groupLabel": "窗口调整大小",
+  "level": 9,
+  "status": "mapped"
+ },
+ {
+  "id": "n:<C-Up>",
+  "display": "<C-Up>",
+  "label": "Increase Window Height",
+  "desc": "Increase Window Height",
+  "mode": "n",
+  "group": "window-resize",
+  "groupLabel": "窗口调整大小",
+  "level": 9,
   "status": "mapped"
  },
  {
