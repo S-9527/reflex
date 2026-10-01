@@ -121,6 +121,24 @@ describe("splitLhs", () => {
   it("往返一致", () => {
     expect(formatKeys(splitLhs("<Space>fg"))).toBe("<Space>fg");
   });
+
+  it("混合串要逐字符拆:字符 + 尖括号记号", () => {
+    // 实测踩过:数据里存在 `[<C-L>` 这种 lhs。用 `<[^<>]+>` 一次性
+    // replace 会拆不出来,keys 长度变成 1,判分永远匹配不上。
+    expect(splitLhs("[<C-L>")).toEqual(["[", "<C-L>"]);
+    expect(splitLhs("]<C-Q>")).toEqual(["]", "<C-Q>"]);
+    expect(splitLhs("[a")).toEqual(["[", "a"]);
+  });
+
+  it("拆分后重新拼接等于原串(对混合串也成立)", () => {
+    for (const s of ["[<C-L>", "]<C-Q>", "[<C-T>", "<Space>ff", "gd", "ZZ", "]a"]) {
+      expect(formatKeys(splitLhs(s)), s).toBe(s);
+    }
+  });
+
+  it("未闭合的尖括号当普通字符处理(不吞掉后面的键)", () => {
+    expect(splitLhs("a<b")).toEqual(["a", "<", "b"]);
+  });
 });
 
 // --- 匹配器 ---

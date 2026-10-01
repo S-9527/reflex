@@ -49,6 +49,14 @@ type State = {
   best: number | null;
   /** 累计过关数 */
   solved: number;
+  /**
+   * 刚答对、正在显示反馈中。
+   *
+   * 之前答对就直接换题(to 立刻随机成新的),于是屏幕上
+   * 「✓ 1 步,最优解」配着一个**已经换掉**的黄色目标框 —— 视觉上自相矛盾。
+   * 答对时先冻结题目,让反馈和目标对得上,再进下一题。
+   */
+  justSolved: boolean;
   /** 反馈信息 */
   msg: { kind: "ok" | "info"; text: string } | null;
 };
@@ -58,7 +66,7 @@ const initial = (): State => {
   const t = makeTask(arena, arena.start);
   return {
     ai: 2, focus: arena.start, from: arena.start, to: t.to,
-    steps: 0, best: null, solved: 0, msg: null,
+    steps: 0, best: null, solved: 0, justSolved: false, msg: null,
   };
 };
 
@@ -74,43 +82,62 @@ export default function WindowsDrill() {
   const newTask = useCallback((ai: number, focus: number) => {
     const a = ARENAS[ai];
     const t = makeTask(a, focus);
-    setS((prev) => ({ ...prev, ai, focus, from: focus, to: t.to, steps: 0, msg: null }));
+    setS((prev) => ({ ...prev, ai, focus, from: focus, to: t.to, steps: 0, msg: null, justSolved: false }));
   }, []);
 
-  const onDir = useCallback((dir: "h" | "j" | "k" | "l") => {
-    setS((prev) => {
-      const a = ARENAS[prev.ai];
-      if (!hasNeighbor(a, prev.focus, dir)) {
+  /** 答对后的下一题 —— 从当前焦点继续出题 */
+  const advance = useCallback((s: State) => {
+    const a = ARENAS[s.ai];
+    const t = makeTask(a, s.focus);
+    return { ...s, from: s.focus, to: t.to, steps: 0, msg: null, justSolved: false };
+  }, []);
+
+  const onDir = useCallback(
+    (dir: "h" | "j" | "k" | "l") => {
+      setS((prev) => {
+        // 刚答对还在显示反馈:任意方向键直接进下一题
+        if (prev.justSolved) return advance(prev);
+
+        const a = ARENAS[prev.ai];
+        if (!hasNeighbor(a, prev.focus, dir)) {
+          return {
+            ...prev,
+            // 按了空键也算一步,否则可以无限乱按
+            steps: prev.steps + 1,
+            msg: { kind: "info", text: `「${a.wins[prev.focus].label}」那个方向没有窗口 —— 这个键在这套布局里是空的` },
+          };
+        }
+        const next = move(a, prev.focus, dir);
+        if (next === null) return prev;
+        const used = prev.steps + 1;
+        if (next !== prev.to) return { ...prev, focus: next, steps: used };
+
+        // 到达目标。**冻结题目** —— to 保持为刚到达的那个,
+        // 让「✓ 1 步」和屏幕上的黄色目标框指的是同一件事。
+        const opt = shortestSteps(a, prev.from, prev.to);
         return {
           ...prev,
-          // 按了空键也算一步,否则可以无限乱按
-          steps: prev.steps + 1,
-          msg: { kind: "info", text: `「${a.wins[prev.focus].label}」那个方向没有窗口 —— 这个键在这套布局里是空的` },
+          focus: next,
+          steps: used,
+          justSolved: true,
+          best: prev.best === null ? used : Math.min(prev.best, used),
+          solved: prev.solved + 1,
+          msg: {
+            kind: "ok",
+            text: used === opt ? `✓ ${used} 步,最优解` : `✓ ${used} 步(最优 ${opt} 步,绕了 ${used - opt} 步)`,
+          },
         };
-      }
-      const next = move(a, prev.focus, dir);
-      if (next === null) return prev;
-      const used = prev.steps + 1;
-      if (next !== prev.to) return { ...prev, focus: next, steps: used };
+      });
+    },
+    [advance],
+  );
 
-      // 到达目标
-      const opt = shortestSteps(a, prev.from, prev.to);
-      const t = makeTask(a, next);
-      return {
-        ...prev,
-        focus: next,
-        from: next,
-        to: t.to,
-        steps: 0,
-        best: prev.best === null ? used : Math.min(prev.best, used),
-        solved: prev.solved + 1,
-        msg: {
-          kind: "ok",
-          text: used === opt ? `✓ ${used} 步,最优解` : `✓ ${used} 步(最优 ${opt} 步,绕了 ${used - opt} 步)`,
-        },
-      };
-    });
-  }, []);
+  // 答对后停 1.4 秒自动进下一题
+  useEffect(() => {
+    if (!s.justSolved) return;
+    const t = setTimeout(() => setS(advance), 1400);
+    return () => clearTimeout(t);
+  }, [s.justSolved, advance]);
 
   // 键盘:方向键 + hjkl 都收
   useEffect(() => {
@@ -204,6 +231,7 @@ export default function WindowsDrill() {
         {s.msg && (
           <div className={`mt-2 ${s.msg.kind === "ok" ? "text-green-400" : "text-neutral-500"}`}>
             {s.msg.text}
+            {s.msg.kind === "ok" && <span className="ml-2 text-neutral-600">按任意方向键继续</span>}
           </div>
         )}
       </div>

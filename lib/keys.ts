@@ -111,20 +111,87 @@ export function normalize(e: {
   };
 }
 
-/** 把 "<Space>ff" 这样的展示串拆成逐键数组,供匹配器建前缀树。 */
+/**
+ * 把 "<Space>ff" 这样的展示串拆成逐键数组,供匹配器建前缀树。
+ *
+ * ⚠️ 必须逐字符扫描,不能用 `<[^<>]+>` 一次性 replace。
+ * 原因:数据里存在 `[<C-L>` 这种「单字符 + 尖括号记号」混合的 lhs
+ * (LazyVim 把它映射到 :lpfile)。用正则 replace 会把整个 `[<C-L>`
+ * 当成不可拆的整体,keys 长度算成 1,判分时按单键匹配,永远匹配不上。
+ * 实测踩过:第一键集合里凭空多出一个 `<C-T>`。
+ */
 export function splitLhs(lhs: string): string[] {
-  // 先摘出所有 <...> 记号
   const out: string[] = [];
-  const rest = lhs.replace(/<[^<>]+>/g, (m) => {
-    out.push(m);
-    return "";
-  });
-  // 剩下的都是单个字符
-  for (const c of rest) out.push(c);
+  let i = 0;
+  while (i < lhs.length) {
+    if (lhs[i] === "<") {
+      const end = lhs.indexOf(">", i);
+      if (end > i) {
+        out.push(lhs.slice(i, end + 1));
+        i = end + 1;
+        continue;
+      }
+    }
+    // 单个字符(可能是 [ ] < 等)
+    out.push(lhs[i]);
+    i++;
+  }
   return out;
 }
 
 /** 便于展示:按键数组 → "<Space>ff" */
 export function formatKeys(keys: string[]): string {
   return keys.join("");
+}
+
+/**
+ * 这个键要不要被训练器接管?
+ *
+ * ## 为什么要有这个函数
+ *
+ * 实测踩过:原来在 keydown handler 里**无条件** `preventDefault()`,
+ * 结果按 Tab 焦点被劫持、Ctrl+R 刷新被拦、F12 开发工具被拦。
+ * 而这些键数据集里根本没有 —— 也就是说用户按它们只会得到一次"判错",
+ * 顺便还丢了浏览器快捷键。
+ *
+ * 判据:**归一化后如果能作为某条绑定的前缀,就接管;否则一律放行。**
+ * 这样既不劫持焦点(F5 不在数据集里 → 放行),也不会漏拦
+ * Ctrl+W(它在数据集里 → 接管,关不掉标签页)。
+ *
+ * ## 唯一的取舍:<Tab>
+ *
+ * 数据集里有一条 <Tab>(snippet 跳转),所以拦它才能练那个键,
+ * 代价是**键盘焦点导航不可用**。想用 Tab 导航,把 <Tab> 从
+ * firstKeySet 里去掉(见 excludeFirstKeys)。
+ */
+export function shouldIntercept(vimKey: string, prefixSet: Set<string>): boolean {
+  if (prefixSet.size === 0) return false;
+  return prefixSet.has(vimKey);
+}
+
+/** 从接管集里排除某些键 —— 用户按自己的习惯排除,比如为了保留 Tab 导航 */
+export function excludeFirstKeys(bindings: { keys: string[] }[], exclude: string[]): Set<string> {
+  const ban = new Set(exclude);
+  const s = new Set<string>();
+  for (const b of bindings) {
+    if (b.keys.length === 0) continue;
+    if (ban.has(b.keys[0])) continue;
+    s.add(b.keys[0]);
+  }
+  return s;
+}
+
+/**
+ * 从数据集里算出「所有可能的第一键」集合。
+ *
+ * 只收单键形式的多键序列的第一键,以及本身就是单键的绑定。
+ * 用 `vim` 记法原文作键,所以 `<Space>`、`<C-H>`、`<Esc>` 都在内。
+ */
+export function firstKeySet(bindings: { keys: string[] }[]): Set<string> {
+  const s = new Set<string>();
+  for (const b of bindings) {
+    if (b.keys.length === 0) continue;
+    s.add(b.keys[0]);
+  }
+  return s;
 }

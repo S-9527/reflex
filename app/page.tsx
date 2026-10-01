@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { normalize, splitLhs } from "@/lib/keys";
+import { normalize, splitLhs, firstKeySet, shouldIntercept, excludeFirstKeys } from "@/lib/keys";
 import { buildIndex, match, type Binding } from "@/lib/matcher";
 import { load, save, record, pickNext, summarize, reset, type Progress } from "@/lib/progress";
 import { RAW, GROUPS, LEVEL_NAMES } from "@/lib/bindings";
@@ -16,6 +16,15 @@ const BINDINGS = RAW.map((r) => ({
   desc: translate(r.display, r.mode, r.desc),
 })) as Binding[];
 const INDEX = buildIndex(BINDINGS);
+
+/**
+ * 只接管「数据集里可能作为第一键」的按键。
+ *
+ * ⚠️ 之前是无条件 preventDefault —— 实测按 Tab 焦点被劫持、
+ * Ctrl+R 刷新被拦、F12 开发工具被拦,而这些键数据集里根本没有,
+ * 按了只会白得一次"判错"顺便丢了浏览器快捷键。
+ */
+const INTERCEPT = firstKeySet(BINDINGS);
 
 /** 按了半个键之后停多久算放弃 */
 const TIMEOUT_MS = 1200;
@@ -46,6 +55,13 @@ export default function Page() {
 
   const [stats, setStats] = useState({ total: BINDINGS.length, mastered: 0, shaky: 0, fresh: BINDINGS.length });
   const [level, setLevel] = useState<number | "all">(1);
+  // 牺牲 <Tab> 键换键盘焦点导航。数据集里有一条 <Tab>(snippet 跳转),
+  // 接管它就意味着 Tab 不再移动焦点 —— 所以做成可选,而不是替你决定。
+  const [keepTabNav, setKeepTabNav] = useState(false);
+  const interceptSet = useMemo(
+    () => (keepTabNav ? excludeFirstKeys(BINDINGS, ["<Tab>"]) : INTERCEPT),
+    [keepTabNav],
+  );
 
   useEffect(() => {
     const p = load();
@@ -121,7 +137,9 @@ export default function Page() {
       const k = normalize(e);
       if (!k) return; // 纯修饰键
 
-      // 必须拦,否则 Ctrl+W 关标签页、Ctrl+T 开新页
+      // 只接管数据集里存在的键。其余(F5 刷新、F12 开发者工具、Ctrl+P 打印)
+      // 放行给浏览器 —— 无条件 preventDefault 会把这些全抢走。
+      if (!shouldIntercept(k.vim, interceptSet)) return;
       e.preventDefault();
 
       // 反馈期间按任意键 → 立刻进下一题,不等自动翻页。
@@ -194,8 +212,20 @@ export default function Page() {
           没见过 <b className="text-neutral-500">{stats.fresh}</b>
         </span>
         <a href="/windows" className="text-blue-400 hover:underline">
-          窗口布局 →
+          窗口练习 →
         </a>
+        <a href="/stats" className="text-blue-400 hover:underline">
+          数据集 →
+        </a>
+        <label className="flex cursor-pointer items-center gap-1 text-neutral-600">
+          <input
+            type="checkbox"
+            checked={keepTabNav}
+            onChange={(e) => setKeepTabNav(e.target.checked)}
+            className="h-3 w-3"
+          />
+          保留 Tab 导航
+        </label>
         <button
           className="ml-auto rounded border border-neutral-700 px-2 py-0.5 text-neutral-400 hover:bg-neutral-800"
           onClick={() => {
