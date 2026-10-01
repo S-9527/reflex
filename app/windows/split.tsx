@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { windowNavDir } from "@/lib/keys";
 import {
   initial,
   split,
@@ -85,6 +86,9 @@ export default function SplitDrill() {
   const [log, setLog] = useState<string[]>([]);
   const [solved, setSolved] = useState<number[]>([]);
   const [showAns, setShowAns] = useState(false);
+  /** 已按下但还没完成的 leader 序列,如 "<Space>" / "<Space>w" */
+  const [pendingLabel, setPendingLabel] = useState<string | null>(null);
+  const seqRef = useRef("");
 
   const task = TASKS[ti];
   const done = shape(v.layout) === task.target;
@@ -93,6 +97,8 @@ export default function SplitDrill() {
     setV({ layout: initial(), focus: 1 });
     setLog([]);
     setShowAns(false);
+    seqRef.current = "";
+    setPendingLabel(null);
   }, []);
 
   useEffect(() => {
@@ -109,21 +115,53 @@ export default function SplitDrill() {
   }, []);
 
   useEffect(() => {
+    // ⚠️ 必须按真正的 <Space> 序列来匹配,不能把裸 `|` / `-` 当分屏键。
+    // 之前直接收 `e.key === "|"`,结果在这一页打一个竖线就分屏 ——
+    // 而真实 LazyVim 里 `<Space>|` 才是 Split Window Right。
+    // 训练器比真实环境宽松 = 练出用不上的肌肉记忆。
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey) return;
-      // 只拦这三个键,其余全放行(不劫持浏览器快捷键)
-      const isSplitV = e.ctrlKey ? e.key === "|" : e.key === "|" || e.key === "\\";
-      const isSplitH = e.key === "-";
-      const isClose = e.ctrlKey && (e.key === "w" || e.key === "W");
-      const isMove = ["h", "j", "k", "l", "H", "J", "K", "L"].includes(e.key) && !e.ctrlKey;
-      if (!isSplitV && !isSplitH && !isClose && !isMove) return;
-      e.preventDefault();
 
-      if (done) {
-        reset();
+      // 窗口导航不受 leader 影响,任何时候都能按
+      const dir = windowNavDir(e);
+      if (dir) {
+        e.preventDefault();
+        seqRef.current = "";
+        act((cur) => {
+          const n = moveFocus(cur.layout, cur.focus, dir);
+          return n === null ? null : { layout: cur.layout, focus: n };
+        }, `<C-${dir.toUpperCase()}>`);
         return;
       }
-      if (isSplitV) {
+      // ⚠️ 纯修饰键必须在这里就放行,而且要放在序列逻辑**之前**。
+      // 实测踩到:按 Shift+| 时浏览器先派发一个 key="Shift" 的 keydown,
+      // 它被当成序列的下一个键 → 匹配不上 → seqRef 被清空 →
+      // 紧接着真正的 key="|" 到达时序列已经没了,分屏不触发。
+      // 表现是「按了 <Space>| 没反应」,而且只在用 Shift 敲竖线时出现,
+      // 纯键盘事件序列测试根本复现不了。
+      if (["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"].includes(e.key)) return;
+      if (e.ctrlKey || e.altKey) return; // 其余带修饰键的一律放行
+
+      // 按下 <Space> 开序列
+      if (e.key === " ") {
+        e.preventDefault();
+        seqRef.current = " ";
+        setPendingLabel("<Space>");
+        return;
+      }
+
+      const seq = seqRef.current;
+      if (!seq) return; // 不在序列里 —— 放行,别劫持普通按键
+
+      e.preventDefault();
+      const ch = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const next = seq + ch;
+      seqRef.current = "";
+
+      // <Space>| 竖切。注意 `|` 需要 Shift+\ ,浏览器报的 key 就是 "|";
+      // 万一报成 "\"(某些终端/输入法)也一并认,两者等价。
+      if (next === " |" || next === " \\" || next === " /") {
+        setPendingLabel(null);
         act(
           (cur) => {
             const l = split(cur.layout, cur.focus, "v");
@@ -131,7 +169,10 @@ export default function SplitDrill() {
           },
           "<Space>|",
         );
-      } else if (isSplitH) {
+        return;
+      }
+      if (next === " -") {
+        setPendingLabel(null);
         act(
           (cur) => {
             const l = split(cur.layout, cur.focus, "h");
@@ -139,24 +180,29 @@ export default function SplitDrill() {
           },
           "<Space>-",
         );
-      } else if (isClose) {
+        return;
+      }
+      // <Space>w 是两击序列(<Space>wd = Delete Window),继续等下一个键
+      if (next === " w") {
+        seqRef.current = " w";
+        setPendingLabel("<Space>w");
+        return;
+      }
+      if (next === " wd") {
+        setPendingLabel(null);
         act((cur) => {
           const l = close(cur.layout, cur.focus);
           if (!l) return null;
-          const alive = countWindows(l.root) > 0;
-          return { layout: l, focus: alive ? cur.focus : 1 };
+          return { layout: l, focus: cur.focus };
         }, "<Space>wd");
-      } else if (isMove) {
-        const d = e.key.toLowerCase() as "h" | "j" | "k" | "l";
-        act((cur) => {
-          const n = moveFocus(cur.layout, cur.focus, d);
-          return n === null ? null : { layout: cur.layout, focus: n };
-        }, `<C-${d.toUpperCase()}>`);
+        return;
       }
+      // 不认识的组合:清掉,不当误触
+      setPendingLabel(null);
     };
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, [act, done, reset]);
+  }, [act]);
 
   // 刚达成 → 记一次并停一下
   useEffect(() => {
@@ -204,7 +250,11 @@ export default function SplitDrill() {
           <span className="text-blue-300">&lt;Space&gt;| 竖切</span>
           <span className="text-blue-300">&lt;Space&gt;- 横切</span>
           <span className="text-blue-300">&lt;C-H/J/K/L&gt; 跳窗口</span>
-          <span className="text-blue-300">hjkl 也能跳</span>
+          {pendingLabel && (
+            <span className="rounded bg-amber-500/20 px-1 text-amber-300">
+              等下一个键… {pendingLabel}
+            </span>
+          )}
           <button onClick={() => setShowAns((s) => !s)} className="ml-auto underline">
             {showAns ? "收起答案" : "看答案"}
           </button>
@@ -230,6 +280,7 @@ export default function SplitDrill() {
           <span className="text-neutral-700">
             按 <kbd>&lt;Space&gt;|</kbd> <kbd>&lt;Space&gt;-</kbd> 分屏,
             <kbd>&lt;C-H/J/K/L&gt;</kbd> 跳窗口
+            <span className="text-neutral-600">(裸 hjkl 不算)</span>
           </span>
         ) : (
           <>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ARENAS, move, hasNeighbor, shortestSteps, makeTask, type Arena } from "@/lib/arena";
+import { windowNavDir } from "@/lib/keys";
 
 /**
  * 窗口方向键练习。
@@ -139,16 +140,12 @@ export default function WindowsDrill() {
     return () => clearTimeout(t);
   }, [s.justSolved, advance]);
 
-  // 键盘:方向键 + hjkl 都收
+  // 键盘:只收 <C-H/J/K/L>。裸 hjkl 和方向键**不收** —— 本机没有这些映射,
+  // 收了会练出用不上的肌肉记忆。判定逻辑见 lib/keys.ts 的 windowNavDir。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey) return;
-      const map: Record<string, "h" | "j" | "k" | "l"> = {
-        ArrowLeft: "h", ArrowRight: "l", ArrowUp: "k", ArrowDown: "j",
-        h: "h", j: "j", k: "k", l: "l",
-        H: "h", J: "j", K: "k", L: "l",
-      };
-      const d = map[e.key];
+      const d = windowNavDir(e);
       if (!d) return;
       e.preventDefault();
       onDir(d);

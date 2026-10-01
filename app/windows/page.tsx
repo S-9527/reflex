@@ -52,7 +52,10 @@ export default function WindowsPage() {
         {mode === "jump" ? (
           <>
             按 <kbd>&lt;C-H&gt;</kbd> <kbd>&lt;C-J&gt;</kbd> <kbd>&lt;C-K&gt;</kbd> <kbd>&lt;C-L&gt;</kbd>{" "}
-            让焦点在窗口间跳(方向键和 hjkl 也行)
+            让焦点在窗口间跳
+            <span className="text-neutral-600">
+              (本机没有裸 hjkl 的映射,不收)
+            </span>
           </>
         ) : (
           <>

@@ -169,6 +169,61 @@ export function shouldIntercept(vimKey: string, prefixSet: Set<string>): boolean
   return prefixSet.has(vimKey);
 }
 
+/**
+ * 窗口导航方向:本机 LazyVim 只有 `<C-H/J/K/L>`。
+ *
+ * ## 实测依据(不是查文档)
+ *
+ * 本机 `nvim_get_keymap("n")` 的真实映射:
+ *
+ * | 显示键| 实际 lhs |右值         | desc|
+ * |--------|----------|-------------|------|
+ * | `<Space>|` | `\|`| `<C-W>v`   | Split Window Right |
+ * | `<Space>-` | `-`  | `<C-W>s`   | Split Window Below |
+ * | `<Space>wd`| `wd` | `<C-W>c`   | Delete Window |
+ * | `<C-H>`| `<C-H>` | `<C-W>h`   | Go to Left Window |
+ * | `<C-J>`| `<C-J>` | `<C-W>j`   | Go to Lower Window |
+ * | `<C-K>`| `<C-K>` | `<C-W>k`   | Go to Upper Window |
+ * | `<C-L>`| `<C-L>` | `<C-W>l`   | Go to Right Window |
+ *
+ * ## ⚠️ 裸 `hjkl` 不跳窗口,方向键也不跳
+ *
+ * 实测Normal 模式下`h` / `l` **没有任何映射**,`j` / `k` 只是 Vim 内建的光标移动
+ * (`j`→Down、`k`→Up),方向键同理。
+ *
+ * 之前 `/windows` 两个页面都把裸 `hjkl` 和方向键当窗口导航收下,这是**错的**:
+ * 在这里练会形成错误的肌肉记忆 —— 回到真nvim 里按 `hjkl` 只会移动光标。
+ * 这类"善意地多收几个键"是训练器最危险的 bug:它让练习比真实更宽松,
+ * 通过率好看,但练的东西用不上。
+ *
+ * 截图里的 `+windows` hydra 里确实有`h/j/k/l`,容易误导 ——
+ * 那是 which-key **hydra 内部**的映射(先按 `<Space><Space>` 进入),
+ * Normal 模式下并没有。
+ *
+ * ## `<C-H>` 的坑
+ *
+ * 实测 Playwright / Chromium:按 Ctrl+H → `key === "h"`, `ctrlKey === true`,
+ * 所以用 `key.toUpperCase()` 就能拿到 "H"。
+ * 另外 `Ctrl-H` 和 `Backspace` 是**同一个字节 0x08**,部分浏览器会报
+ * `Backspace`,所以一并收下(数据集中窗口导航只有 `<C-H>`,不会误伤别的东西)。
+ */
+export function windowNavDir(e: {
+  key: string;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+}): "h" | "j" | "k" | "l" | null {
+  // 只有 Ctrl 才是窗口导航。裸 hjkl / 方向键一律不管,见上面的说明。
+  if (!e.ctrlKey || e.altKey || e.metaKey) return null;
+  if (e.key === "Backspace") return "h";
+  const k = e.key.length === 1 ? e.key.toUpperCase() : "";
+  if (k === "H") return "h";
+  if (k === "J") return "j";
+  if (k === "K") return "k";
+  if (k === "L") return "l";
+  return null;
+}
+
 /** 从接管集里排除某些键 —— 用户按自己的习惯排除,比如为了保留 Tab 导航 */
 export function excludeFirstKeys(bindings: { keys: string[] }[], exclude: string[]): Set<string> {
   const ban = new Set(exclude);
