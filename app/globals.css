@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* 这个训练器是全屏工具,深色是唯一模式,不跟随系统。
+   变量名和值沿用 create-next-app 脚手架的约定,只把 light 那套删掉。 */
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+/* 脚手架生成的关键块:把 CSS 变量接进 Tailwind 主题。
+   漏了它,`font-mono` / `bg-background` 这类语义类拿不到值 ——
+   表现为"类名写了但样式没生效",很容易误以为是 Tailwind 没装对。 */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

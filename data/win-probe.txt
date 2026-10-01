@@ -1,0 +1,19 @@
+=== 描述含 window/split/close/resize ===
+n  |  wd                | Delete Window
+n  |  |                 | Split Window Right
+n  |  -                 | Split Window Below
+n  |  bD                | Delete Buffer and Window
+n  | <C-Right>          | Increase Window Width
+n  | <C-Left>           | Decrease Window Width
+n  | <C-Down>           | Decrease Window Height
+n  | <C-Up>             | Increase Window Height
+n  | <C-K>              | Go to Upper Window
+n  | <C-J>              | Go to Lower Window
+n  | <C-H>              | Go to Left Window
+n  | <C-W>              | Window Hydra Mode (which-key)
+n  | <C-L>              | Go to Right Window
+
+=== <C-w> 开头的映射(全部模式) ===
+
+=== which-key 的 window 节点 ===
+which-key.state 可读: false
