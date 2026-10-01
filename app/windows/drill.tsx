@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ARENAS, move, hasNeighbor, shortestSteps, makeTask, type Arena } from "@/lib/arena";
 
 /**
@@ -9,15 +9,10 @@ import { ARENAS, move, hasNeighbor, shortestSteps, makeTask, type Arena } from "
  * ## 为什么单独一页
  *
  * 训练主页是"给描述 → 敲键序列",判分靠键序列匹配。
- * 但窗口方向键不一样:<C-J> 本身没有描述(它是"往下"),判分只能靠
+ * 但窗口方向键不一样:<C-J> 本身没有描述(它就是"往下"),判分只能靠
  * "焦点最终落在哪个格子"。所以这里需要一套完全不同的判分方式。
- *
- * ## 布局怎么画
- *
- * 不用 row/col —— 那是终端坐标。这里只用邻接表(leftOf/rightOf/...),
- * 格子位置由布局形状硬编码(CSS grid),因为 5 套布局形状是固定的。
  */
-type Shape = "1x2" | "2x1" | "2x2" | "1x3" | "left-split";
+type Shape = "1x2" | "2x1" | "2x2" | "left-split";
 
 const SHAPES: Record<string, Shape> = {
   "左右两栏": "1x2",
@@ -27,66 +22,95 @@ const SHAPES: Record<string, Shape> = {
   "嵌套(竖切再横切)": "left-split",
 };
 
-export default function WindowsDrill() {
-  const [ai, setAi] = useState(2); // 默认四宫格
-  const [focus, setFocus] = useState(0);
-  const [task, setTask] = useState<{ to: number; hint: string } | null>(null);
-  const [msg, setMsg] = useState<{ kind: "ok" | "bad" | "info"; text: string } | null>(null);
-  const [steps, setSteps] = useState(0);
-  const [best, setBest] = useState<number | null>(null);
-  const [solved, setSolved] = useState(0);
+/**
+ * 全部练习状态放在**一个** state 里。
+ *
+ * ## 为什么不是分开放
+ *
+ * 实测踩过:切布局时 `ai` 已经变成两栏(2 个窗口),但 `task.to` 还是
+ * 上一套四宫格的值(3)。渲染时 `arena.wins[3]` → undefined,
+ * 读 `.label` 就崩 —— 四宫格(4 个窗口)恰好正常,其他全炸。
+ *
+ * 分开存就意味着"存在一个中间状态,新旧数据不匹配"。合并成一个对象
+ * 之后,`set` 一次全换,**结构上不可能不同步**。
+ */
+type State = {
+  /** 布局下标 */
+  ai: number;
+  /** 当前焦点窗口 */
+  focus: number;
+  /** 出题时的起点。最优步数要从这里算,不是从 arena.start */
+  from: number;
+  /** 目标窗口下标。恒与 ai/focus 同源 */
+  to: number;
+  /** 已走步数 */
+  steps: number;
+  /** 历史最好步数 */
+  best: number | null;
+  /** 累计过关数 */
+  solved: number;
+  /** 反馈信息 */
+  msg: { kind: "ok" | "info"; text: string } | null;
+};
 
-  const arena: Arena = ARENAS[ai];
+const initial = (): State => {
+  const arena = ARENAS[2]; // 四宫格
+  const t = makeTask(arena, arena.start);
+  return {
+    ai: 2, focus: arena.start, from: arena.start, to: t.to,
+    steps: 0, best: null, solved: 0, msg: null,
+  };
+};
+
+export default function WindowsDrill() {
+  const [s, setS] = useState<State>(initial);
+
+  const arena: Arena = ARENAS[s.ai];
   const shape = SHAPES[arena.name] ?? "2x2";
 
-  const newTask = useCallback(() => {
-    const t = makeTask(arena, focus);
-    setTask({ to: t.to, hint: t.hint });
-    setSteps(0);
-    setMsg(null);
-  }, [arena, focus]);
+  /** 目标标签。从 arena 现场算,不单独存 —— 避免和 ai 不同步 */
+  const target = arena.wins[s.to];
 
-  // 换布局 → 重置焦点和题目
-  useEffect(() => {
-    setFocus(arena.start);
-    setSteps(0);
-    setMsg(null);
-    setBest(null);
-    const t = makeTask(arena, arena.start);
-    setTask({ to: t.to, hint: t.hint });
-  }, [arena]);
+  const newTask = useCallback((ai: number, focus: number) => {
+    const a = ARENAS[ai];
+    const t = makeTask(a, focus);
+    setS((prev) => ({ ...prev, ai, focus, from: focus, to: t.to, steps: 0, msg: null }));
+  }, []);
 
-  const onDir = useCallback(
-    (dir: "h" | "j" | "k" | "l") => {
-      if (!task) return;
-      if (!hasNeighbor(arena, focus, dir)) {
-        const w = arena.wins[focus].label;
-        setMsg({ kind: "info", text: `「${w}」那个方向没有窗口 —— 这个键在这套布局里是空的` });
-        setSteps((s) => s + 1); // 按了空键也算一步,不然可以无限乱按
-        return;
+  const onDir = useCallback((dir: "h" | "j" | "k" | "l") => {
+    setS((prev) => {
+      const a = ARENAS[prev.ai];
+      if (!hasNeighbor(a, prev.focus, dir)) {
+        return {
+          ...prev,
+          // 按了空键也算一步,否则可以无限乱按
+          steps: prev.steps + 1,
+          msg: { kind: "info", text: `「${a.wins[prev.focus].label}」那个方向没有窗口 —— 这个键在这套布局里是空的` },
+        };
       }
-      const next = move(arena, focus, dir);
-      if (next === null) return;
-      setFocus(next);
-      const used = steps + 1;
-      setSteps(used);
+      const next = move(a, prev.focus, dir);
+      if (next === null) return prev;
+      const used = prev.steps + 1;
+      if (next !== prev.to) return { ...prev, focus: next, steps: used };
 
-      if (next === task.to) {
-        const opt = shortestSteps(arena, arena.start, task.to);
-        setSolved((s) => s + 1);
-        setMsg({
+      // 到达目标
+      const opt = shortestSteps(a, prev.from, prev.to);
+      const t = makeTask(a, next);
+      return {
+        ...prev,
+        focus: next,
+        from: next,
+        to: t.to,
+        steps: 0,
+        best: prev.best === null ? used : Math.min(prev.best, used),
+        solved: prev.solved + 1,
+        msg: {
           kind: "ok",
-          text:
-            used === opt
-              ? `✓ ${used} 步,最优解`
-              : `✓ ${used} 步(最优 ${opt} 步,绕了 ${used - opt} 步)`,
-        });
-        setBest((b) => (b === null ? used : Math.min(b, used)));
-        setTimeout(newTask, 1200);
-      }
-    },
-    [arena, focus, steps, task, newTask],
-  );
+          text: used === opt ? `✓ ${used} 步,最优解` : `✓ ${used} 步(最优 ${opt} 步,绕了 ${used - opt} 步)`,
+        },
+      };
+    });
+  }, []);
 
   // 键盘:方向键 + hjkl 都收
   useEffect(() => {
@@ -97,7 +121,6 @@ export default function WindowsDrill() {
         h: "h", j: "j", k: "k", l: "l",
         H: "h", J: "j", K: "k", L: "l",
       };
-      // 训练的是 <C-H> 系列。Ctrl 也接受,方便你用真实习惯练。
       const d = map[e.key];
       if (!d) return;
       e.preventDefault();
@@ -109,14 +132,13 @@ export default function WindowsDrill() {
 
   return (
     <div className="space-y-4">
-      {/* 布局选择 */}
       <div className="flex flex-wrap gap-1.5">
         {ARENAS.map((a, i) => (
           <button
             key={a.name}
-            onClick={() => setAi(i)}
+            onClick={() => newTask(i, a.start)}
             className={`rounded border px-2 py-0.5 text-xs ${
-              i === ai ? "border-blue-400 bg-blue-400 text-black" : "border-neutral-700 text-neutral-400 hover:bg-neutral-800"
+              i === s.ai ? "border-blue-400 bg-blue-400 text-black" : "border-neutral-700 text-neutral-400 hover:bg-neutral-800"
             }`}
           >
             {a.name}
@@ -126,11 +148,10 @@ export default function WindowsDrill() {
 
       <p className="text-xs text-neutral-500">{arena.note}</p>
 
-      {/* 窗口格子 */}
       <div className={gridClass(shape)}>
         {arena.wins.map((w, i) => {
-          const isFocus = i === focus;
-          const isTarget = task?.to === i;
+          const isFocus = i === s.focus;
+          const isTarget = s.to === i;
           return (
             <div
               key={i}
@@ -157,48 +178,39 @@ export default function WindowsDrill() {
         })}
       </div>
 
-      {/* 题目 */}
       <div className="rounded border border-neutral-800 bg-neutral-900/40 p-3 text-xs">
-        {task && (
-          <div className="mb-2 text-neutral-300">
-            目标:把焦点移到 <b className="text-yellow-400">{arena.wins[task.to].label}</b>
-            <div className="mt-1 text-neutral-500">{task.hint}</div>
-          </div>
-        )}
+        <div className="mb-2 text-neutral-300">
+          目标:把焦点移到 <b className="text-yellow-400">{target?.label ?? "?"}</b>
+        </div>
         <div className="flex flex-wrap items-center gap-3 text-neutral-500">
           <span>
-            已走 <b className="text-neutral-300">{steps}</b> 步
+            已走 <b className="text-neutral-300">{s.steps}</b> 步
           </span>
-          {best !== null && (
+          {s.best !== null && (
             <span>
-              最好 <b className="text-green-400">{best}</b> 步
+              最好 <b className="text-green-400">{s.best}</b> 步
             </span>
           )}
           <span>
-            已过 <b className="text-neutral-300">{solved}</b> 关
+            已过 <b className="text-neutral-300">{s.solved}</b> 关
           </span>
           <button
-            onClick={newTask}
+            onClick={() => newTask(s.ai, s.focus)}
             className="ml-auto rounded border border-neutral-700 px-2 py-0.5 text-neutral-400 hover:bg-neutral-800"
           >
             换一题
           </button>
         </div>
-        {msg && (
-          <div
-            className={`mt-2 ${
-              msg.kind === "ok" ? "text-green-400" : msg.kind === "bad" ? "text-red-400" : "text-neutral-500"
-            }`}
-          >
-            {msg.text}
+        {s.msg && (
+          <div className={`mt-2 ${s.msg.kind === "ok" ? "text-green-400" : "text-neutral-500"}`}>
+            {s.msg.text}
           </div>
         )}
       </div>
 
-      {/* 键位提示:哪些方向键在这套布局里有效 */}
       <div className="flex flex-wrap gap-2 text-[11px] text-neutral-600">
         {(["k", "h", "j", "l"] as const).map((d) => {
-          const ok = hasNeighbor(arena, focus, d);
+          const ok = hasNeighbor(arena, s.focus, d);
           const arrow = { k: "<C-K> ↑", h: "<C-H> ←", j: "<C-J> ↓", l: "<C-L> →" }[d];
           return (
             <span
@@ -225,8 +237,6 @@ function gridClass(shape: Shape): string {
       return "grid grid-rows-2 gap-2";
     case "2x2":
       return "grid grid-cols-2 grid-rows-2 gap-2";
-    case "1x3":
-      return "grid grid-cols-3 gap-2";
     case "left-split":
       return "grid grid-cols-[2fr_3fr] grid-rows-2 gap-2";
   }
@@ -239,8 +249,6 @@ function gridClass(shape: Shape): string {
  *   左上 | 右侧
  *   左下 | (右侧跨两行)
  * 自动流会把「右侧」排到第 2 行第 1 列,变成第三个独立格子,图就错了。
- * 这和 lib/layout.ts 里那个「横跨两列的窗口被画两遍」是同一类问题:
- * 视觉上要显式控制,不能指望默认行为。
  */
 function cellStyle(shape: Shape, i: number): React.CSSProperties | undefined {
   if (shape !== "left-split") return undefined;
