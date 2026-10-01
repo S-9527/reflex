@@ -5,17 +5,32 @@ import { DEMOTED } from "../scripts/build-dataset.mjs";
 const byDisplay = new Map(RAW.map((b) => [b.display, b]));
 
 describe("关卡分级", () => {
-  it("第 1 关只含高价值键:窗口导航 + 关闭 + 缩放", () => {
+  it("第 1 关含完整窗口闭环:创建 → 跳转 → 关闭 → 缩放", () => {
     const l1 = RAW.filter((b) => b.level === 1);
-    const displays = l1.map((b) => b.display).sort();
-    expect(displays).toEqual([
-      "<C-H>",
-      "<C-J>",
-      "<C-K>",
-      "<C-L>",
-      "<Space>wd",
-      "<Space>wm",
-    ]);
+    // 用集合比较,不用有序数组 —— 顺序只是 sort() 的结果,不是契约。
+    // (手写顺序时踩过:`|` 是 0x7C,排在所有字母之后)
+    expect(new Set(l1.map((b) => b.display))).toEqual(
+      new Set(["<C-H>", "<C-J>", "<C-K>", "<C-L>", "<Space>-", "<Space>|", "<Space>wd", "<Space>wm"]),
+    );
+  });
+
+  it("第 1 关必须有能创建窗口的键(能跳却不能创建,逻辑上不成立)", () => {
+    // 实测踩过:LazyVim 16 的分屏键是 <Space>| 和 <Space>-,
+    // 不匹配任何 leader 子树,掉进 leader-other 兜底桶排到第 10 关。
+    // 结果第 1 关叫「窗口」却一个创建键都没有。
+    const l1 = RAW.filter((b) => b.level === 1);
+    const creates = l1.filter((b) => /Split Window/.test(b.desc));
+    expect(creates.length, "第 1 关没有创建窗口的键").toBeGreaterThanOrEqual(2);
+    // 且必须同时有左右和上下两种
+    expect(creates.some((b) => /Right/.test(b.desc))).toBe(true);
+    expect(creates.some((b) => /Below/.test(b.desc))).toBe(true);
+  });
+
+  it("所有分屏键都在第 1 关,不在兜底桶里", () => {
+    for (const b of RAW.filter((x) => /Split Window/.test(x.desc))) {
+      expect(b.level, `${b.display} 是分屏键,应该在第 1 关`).toBe(1);
+      expect(b.group, `${b.display} 归到了错的组`).toBe("window");
+    }
   });
 
   it("调整大小的 4 条确实在降级名单里,且真的被降到 9", () => {

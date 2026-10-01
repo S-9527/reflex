@@ -26,6 +26,13 @@ function toVimNotation(lhs) {
  */
 // 注意顺序:长前缀在前,<Space> 兜底必须放最后,
 // 否则 `find()` 会先命中 <Space> 把所有 leader 键都吞进 leader-other。
+//
+// ⚠️ 分屏键为什么是精确匹配而不是前缀:
+// LazyVim 16 里创建窗口不是 <Space>ws / <Space>wv(那是书里的旧键),
+// 而是 <Space>| 和 <Space>-。它们不匹配任何 leader 子树,
+// 所以必须显式列出来 —— 否则会掉进 leader-other 兜底桶排到第 10 关,
+// 而「窗口」组里就一个创建窗口的键都没有,逻辑上不成立
+// (能跳窗口却不能创建,现实中的顺序是先分屏再跳)。
 const GROUPS = [
   // 窗口排第 1 关:这是用户当前自评的弱项
   { prefix: "<Space>w", key: "window", label: "窗口", level: 1 },
@@ -140,7 +147,15 @@ for (const r of raw) {
     continue;
   }
 
+  // 精确键名映射(不分 leader 子树)。分屏键必须走这里 ——
+  // 见 GROUPS 上面的说明:它们不匹配任何前缀规则。
+  const EXACT = {
+    "<Space>|": { key: "window", label: "窗口", level: 1 },
+    "<Space>-": { key: "window", label: "窗口", level: 1 },
+  };
+
   const g =
+    EXACT[vim] ||
     GROUPS.find((x) => vim.startsWith(x.prefix) && vim !== x.prefix) ||
     classifyBare(vim) || { key: "other", label: "其他", level: 9 };
 

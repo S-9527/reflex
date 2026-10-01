@@ -86,6 +86,28 @@ export const RAW: Omit<Binding, "keys">[] = [
   "status": "mapped"
  },
  {
+  "id": "n:<Space>-",
+  "display": "<Space>-",
+  "label": "Split Window Below",
+  "desc": "Split Window Below",
+  "mode": "n",
+  "group": "window",
+  "groupLabel": "窗口",
+  "level": 1,
+  "status": "mapped"
+ },
+ {
+  "id": "n:<Space>|",
+  "display": "<Space>|",
+  "label": "Split Window Right",
+  "desc": "Split Window Right",
+  "mode": "n",
+  "group": "window",
+  "groupLabel": "窗口",
+  "level": 1,
+  "status": "mapped"
+ },
+ {
   "id": "n:<Space>wd",
   "display": "<Space>wd",
   "label": "Delete Window",
@@ -2869,17 +2891,6 @@ export const RAW: Omit<Binding, "keys">[] = [
   "status": "mapped"
  },
  {
-  "id": "n:<Space>-",
-  "display": "<Space>-",
-  "label": "Split Window Below",
-  "desc": "Split Window Below",
-  "mode": "n",
-  "group": "leader-other",
-  "groupLabel": "其他 leader 键",
-  "level": 10,
-  "status": "mapped"
- },
- {
   "id": "n:<Space>,",
   "display": "<Space>,",
   "label": "Buffers",
@@ -3016,17 +3027,6 @@ export const RAW: Omit<Binding, "keys">[] = [
   "display": "<Space><Tab>o",
   "label": "Close Other Tabs",
   "desc": "Close Other Tabs",
-  "mode": "n",
-  "group": "leader-other",
-  "groupLabel": "其他 leader 键",
-  "level": 10,
-  "status": "mapped"
- },
- {
-  "id": "n:<Space>|",
-  "display": "<Space>|",
-  "label": "Split Window Right",
-  "desc": "Split Window Right",
   "mode": "n",
   "group": "leader-other",
   "groupLabel": "其他 leader 键",
