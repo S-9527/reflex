@@ -5,9 +5,16 @@ import { normalize, splitLhs } from "@/lib/keys";
 import { buildIndex, match, type Binding } from "@/lib/matcher";
 import { load, save, record, pickNext, summarize, reset, type Progress } from "@/lib/progress";
 import { RAW, GROUPS, LEVEL_NAMES } from "@/lib/bindings";
+import { translate } from "@/lib/i18n";
 
-// 数据集里 keys 留空(运行时用 splitLhs 展开)
-const BINDINGS = RAW.map((r) => ({ ...r, keys: splitLhs(r.display) })) as Binding[];
+// 数据集里 keys 留空(运行时用 splitLhs 展开),desc 换成中文
+const BINDINGS = RAW.map((r) => ({
+  ...r,
+  keys: splitLhs(r.display),
+  // 保留英文原文在 descEn,中文进 desc。答题时只显示 desc。
+  descEn: r.desc,
+  desc: translate(r.display, r.mode, r.desc),
+})) as Binding[];
 const INDEX = buildIndex(BINDINGS);
 
 /** 按了半个键之后停多久算放弃 */
@@ -16,10 +23,17 @@ const TIMEOUT_MS = 1200;
 type Phase = "idle" | "correct" | "wrong";
 
 export default function Page() {
-  // 进度从 localStorage 读。注意用 useState 的懒初始化而不是 useEffect:
-  // 用 useEffect 会先渲染一帧"没加载完"的空态,再补数据 —— 那帧里
-  // 「已掌握 0 / 没见过 300」会闪一下,而且判分逻辑读不到已存进度。
-  const [progress, setProgress] = useState<Progress>(() => load());
+  // 进度从 localStorage 读。
+  //
+  // ⚠️ 不能用 useState 懒初始化(`useState(() => load())`):
+  //    SSR 阶段 localStorage 不存在 → 服务端渲染出「没见过 290」,
+  //    客户端读出真实进度 → hydration mismatch,整棵树在客户端重建。
+  //    实测踩到:控制台报 Hydration failed。
+  //
+  // 正确做法:初值恒为 null 表示"还没加载",SSR 和客户端首帧一致;
+  // 挂载后再读 localStorage。代价是加载完之前不显示统计数字(而不是
+  // 显示错的数字 —— 后者更糟,会让人以为进度丢了)。
+  const [progress, setProgress] = useState<Progress | null>(null);
   const [current, setCurrent] = useState<Binding | null>(null);
   const [typed, setTyped] = useState<string[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -28,10 +42,17 @@ export default function Page() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recent = useRef<string[]>([]);
   // progressRef:让 next()/commit() 读到最新 progress 而不重建闭包
-  const progressRef = useRef<Progress>(progress);
+  const progressRef = useRef<Progress>({});
 
-  const [stats, setStats] = useState(() => summarize(load(), BINDINGS));
+  const [stats, setStats] = useState({ total: BINDINGS.length, mastered: 0, shaky: 0, fresh: BINDINGS.length });
   const [level, setLevel] = useState<number | "all">(1);
+
+  useEffect(() => {
+    const p = load();
+    progressRef.current = p;
+    setProgress(p);
+    setStats(summarize(p, BINDINGS));
+  }, []);
 
   const pool = useMemo(
     () => (level === "all" ? BINDINGS : BINDINGS.filter((b) => b.level === level)),
@@ -59,11 +80,15 @@ export default function Page() {
     recent.current = [...recent.current, b.id];
   }, []);
 
-  // 首次挂载 + 切关卡时出题。next 引用稳定,所以这个 effect 只在 level 变时跑。
+  // 切关卡时出第一题。next 引用稳定,所以这个 effect 只在 level 变时跑。
+  // 必须等 progress 加载完 —— 否则第一题是按"空进度"挑的,
+  // 而 pickNext 的权重完全依赖 seen/streak,会挑错题。
+  const progressReady = progress !== null;
   useEffect(() => {
+    if (!progressReady) return;
     setCurrent(null);
     next();
-  }, [level, next]);
+  }, [level, progressReady, next]);
 
   const clearTimer = () => {
     if (timer.current) {
@@ -169,7 +194,7 @@ export default function Page() {
             progressRef.current = empty;
             setProgress(empty);
             setStats(summarize(empty, BINDINGS));
-            setCurrent(null);
+            recent.current = [];
             next();
           }}
         >

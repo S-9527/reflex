@@ -27,6 +27,8 @@ export type Binding = {
   groupLabel: string;
   level: number;
   status: "verified" | "mapped" | "unknown";
+  /** 英文原文。中文翻译后仍保留,便于对照上游 */
+  descEn?: string;
   /** 易混项 / 坑 */
   traps?: string;
 };
