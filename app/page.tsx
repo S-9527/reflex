@@ -193,6 +193,9 @@ export default function Page() {
         <span>
           没见过 <b className="text-neutral-500">{stats.fresh}</b>
         </span>
+        <a href="/windows" className="text-blue-400 hover:underline">
+          窗口布局 →
+        </a>
         <button
           className="ml-auto rounded border border-neutral-700 px-2 py-0.5 text-neutral-400 hover:bg-neutral-800"
           onClick={() => {
