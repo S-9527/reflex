@@ -48,6 +48,26 @@ const GROUPS = [
 ];
 
 /**
+ * 裸键(不带 leader)按前缀分类 —— 第 4 关曾经有 74 条全落在
+ * classifyBare 的"多键序列"兜底里,混着三种完全不同的技能。
+ *
+ * 拆开的原因:74 条一关练不完,而且里面一半是低频键。
+ * 拆成「上一个/下一个」「文本对象 / 注释」「LSP」「跳转 / 其他」四关,
+ * 每关十几到二十条,才练得完。
+ */
+const BARE_PREFIX = [
+  // [d ]d [w ]w [b ]b [t ]t [e ]e [q ]q [D ]D —— 高频,成对出现好记
+  { re: /^[[\]][[a-zA-Z]$/, key: "prevnext", label: "上一个 / 下一个", level: 11 },
+  { re: /^[[\]]<?<C-[LQT]>?$/, key: "listjump", label: "列表跳转(少用)", level: 12 },
+  // 文本对象与注释:第 7 章核心
+  { re: /^(al|an|il|in|gc|gcc|gco|gcO)$/, key: "textobj", label: "文本对象 / 注释", level: 13 },
+  // LSP:gri grn gra gO 等,buffer-local 与全局的差异见 memo 笔记
+  { re: /^(gr[a-zA-Z]+|g[a-zA-Z]I?|gO|g;|g[gG][a-zA-Z]+)$/, key: "lsp-bare", label: "LSP / 跳转(g 前缀)", level: 14 },
+  // g[ g] 双向跳转等
+  { re: /^g[[\]`'"<>{}$(]/, key: "jump-bare", label: "跳转标记", level: 14 },
+];
+
+/**
  * 降级名单:从第 1 关挪到第 9 关的键。
  *
  * 抽出来单独放,是为了能被 tests/dataset.test.ts 断言 ——
@@ -91,12 +111,21 @@ const CTRL_WINDOW_RESIZE = new Set([
 function classifyBare(lhs) {
   if (CTRL_WINDOW_NAV.has(lhs)) return { key: "window", label: "窗口", level: 1 };
   if (CTRL_WINDOW_RESIZE.has(lhs)) return { key: "window-resize", label: "窗口调整大小", level: 9 };
+  if (lhs === "jk") return { key: "mine", label: "我自己的映射", level: 1 };
+
+  // 裸键优先按 BARE_PREFIX 精确归类。放在 Ctrl / 特殊键之前,
+  // 因为 `]<C-L>` 这类要进"列表跳转"而不是"特殊键"。
+  for (const p of BARE_PREFIX) {
+    if (p.re.test(lhs)) return { key: p.key, label: p.label, level: p.level };
+  }
+
   if (/^<C-[bB]/.test(lhs)) return { key: "ctrl-b", label: "Ctrl-b 系列", level: 5 };
   if (/^</.test(lhs)) return { key: "special", label: "特殊键", level: 6 };
   if (/^[A-Z]/.test(lhs)) return { key: "upper", label: "大写键", level: 3 };
-  if (lhs === "jk") return { key: "mine", label: "我自己的映射", level: 1 };
   if (lhs.length === 1) return { key: "single", label: "单键", level: 2 };
-  return { key: "multi", label: "多键序列", level: 4 };
+  // 兜底:真的归不了类的。level 15,排在所有专题之后 ——
+  // 以前它叫"多键序列"排第 4 关,和会话混在一起,79 条练不完。
+  return { key: "bare-rest", label: "其他裸键", level: 15 };
 }
 
 const out = [];
@@ -197,9 +226,10 @@ ${[...new Set(out.map((b) => b.group))]
 };
 
 export const LEVEL_NAMES: Record<number, string> = {
-${[...new Set(out.map((b) => b.level))].sort((a, b) => a - b).map((l) => `  ${l}: ${JSON.stringify(
-    l === 1 ? "第 1 关 · 立刻要会" : l === 11 ? "附:Ex 命令变体" : `第 ${l} 关`,
-  )},`).join("\n")}
+${[...new Set(out.map((b) => b.level))]
+  .sort((a, b) => a - b)
+  .map((l) => `  ${l}: ${JSON.stringify(l === 1 ? "第 1 关 · 窗口(你的弱项)" : `第 ${l} 关`)},`)
+  .join("\n")}
 };
 
 export const RAW: Omit<Binding, "keys">[] = ${JSON.stringify(
