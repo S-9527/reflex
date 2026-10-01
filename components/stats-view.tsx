@@ -1,111 +1,125 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-  levelStats,
-  modeTotals,
-  prefixTree,
-  progressByLevel,
-  MODE_LABEL,
-  type ProgressView,
-} from "@/lib/stats";
+import { levelStats, modeTotals, prefixTree, progressByLevel } from "@/lib/stats";
 import type { Binding } from "@/lib/matcher";
 
 /**
- * 数据集全貌 —— 三个视图:关卡条形图 / 模式分布 / leader 树。
+ * 数据集统计视图。
  *
- * 存在的理由:之前想知道"分屏键在哪一关""第 4 关为什么 79 条",
- * 只能读代码或临时跑脚本。数据一散,就得反推。
+ * ## 为什么用「渲染函数数组」而不是条件 JSX
+ *
+ * 上一版用 `{!only && <>...</>}` 包了三层,括号配平就出了语法错。
+ * 这里改成:每个 section 是一个返回 JSX 的函数,渲染时 filter 掉不显示的。
+ * 扁平,而且加 section 不用改括号。
  */
+type Progress = Record<string, { seen: number; correct: number; streak: number; lastAt: number }>;
+
+export type StatsSection = "levels" | "modes" | "tree" | "length";
+
 export default function StatsView({
   bindings,
   levelNames,
   progress,
+  only,
 }: {
   bindings: Binding[];
   levelNames: Record<number, string>;
-  progress: Record<string, { seen: number; correct: number; streak: number; lastAt: number }>;
+  progress: Progress;
+  /** 只显示某几节。不传 = 全显示 */
+  only?: StatsSection[];
 }) {
   const levels = useMemo(() => levelStats(bindings, levelNames), [bindings, levelNames]);
   const modes = useMemo(() => modeTotals(bindings), [bindings]);
   const tree = useMemo(() => prefixTree(bindings), [bindings]);
   const prog = useMemo(() => progressByLevel(bindings, progress), [bindings, progress]);
 
-  const maxTotal = Math.max(...levels.map((l) => l.total), 1);
-  const maxTree = Math.max(...tree.map((n) => n.count), 1);
+  const maxTotal = Math.max(1, ...levels.map((l) => l.total));
+  const maxTree = Math.max(1, ...tree.map((n) => n.count));
+  const show = (s: StatsSection) => !only || only.includes(s);
 
-  return (
-    <div className="space-y-8">
-      <Section title="关卡分布" hint="条形长度 = 该关条目数。灰色尾巴是还没练过的">
+  const sections: { id: StatsSection; title: string; hint?: string; render: () => React.ReactNode }[] = [
+    {
+      id: "levels",
+      title: "关卡分布",
+      hint: "条形长度 = 该关条目数。三段叠在一条上:已掌握 / 已见过 / 没见过",
+      render: () => (
         <div className="space-y-1">
           {levels.map((l) => {
             const p = prog.find((x) => x.level === l.level);
-            const done = p ? p.mastered + p.shaky : 0;
-            const mastered = p ? p.mastered : 0;
+            const mastered = p?.mastered ?? 0;
+            const seen = p ? p.mastered + p.shaky : 0;
             return (
               <div key={l.level} className="flex items-center gap-2 text-xs">
-                <span className="w-24 shrink-0 text-right text-neutral-500">{l.name}</span>
-                <div className="relative h-4 flex-1 rounded bg-neutral-900">
-                  {/* 分三段叠在同一条上:已掌握 / 已见过 / 没见过。
-                      不用两个 div 叠加 —— 那样后半段会盖住前半段。 */}
-                  <div className="absolute inset-0 overflow-hidden rounded">
-                    <div
-                      className="absolute inset-y-0 left-0 bg-blue-600"
-                      style={{ width: `${(mastered / maxTotal) * 100}%` }}
-                    />
-                    <div
-                      className="absolute inset-y-0 left-0 bg-blue-900"
-                      style={{ width: `${(done / maxTotal) * 100}%` }}
-                    />
-                    <div
-                      className="absolute inset-y-0 left-0 bg-neutral-700"
-                      style={{ width: `${(l.total / maxTotal) * 100}%` }}
-                    />
-                  </div>
-                  <span className="absolute inset-y-0 left-1 flex items-center text-[10px] text-neutral-100 mix-blend-difference">
+                <span className="w-28 shrink-0 truncate text-right text-neutral-500">{l.name}</span>
+                <div className="relative h-4 flex-1 rounded bg-neutral-950">
+                  {/* 三段从宽到窄画,窄的压在上面 —— 反过来会被盖住 */}
+                  <div
+                    className="absolute inset-y-0 left-0 rounded bg-neutral-700"
+                    style={{ width: `${(l.total / maxTotal) * 100}%` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 left-0 rounded bg-blue-900"
+                    style={{ width: `${(seen / maxTotal) * 100}%` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 left-0 rounded bg-blue-600"
+                    style={{ width: `${(mastered / maxTotal) * 100}%` }}
+                  />
+                  <span className="absolute inset-y-0 left-1.5 flex items-center text-[10px] text-white mix-blend-difference">
                     {l.total}
                   </span>
                 </div>
-                <span className="w-24 shrink-0 truncate text-neutral-600">{l.groupLabel}</span>
+                <span className="w-28 shrink-0 truncate text-neutral-600">{l.groupLabel}</span>
               </div>
             );
           })}
         </div>
-      </Section>
-
-      <Section title="模式分布" hint="日常主要在 Normal 模式,那一行最粗是正常的">
-        <div className="flex h-8 overflow-hidden rounded">
-          {modes.map((m) => (
-            <div
-              key={m.mode}
-              className="flex items-center justify-center text-[10px] text-black"
-              style={{
-                width: `${(m.count / bindings.length) * 100}%`,
-                background: modeColor(m.mode),
-              }}
-              title={`${m.label}: ${m.count}`}
-            >
-              {m.count}
-            </div>
-          ))}
-        </div>
-        <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-neutral-500">
-          {modes.map((m) => (
-            <span key={m.mode} className="flex items-center gap-1">
-              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: modeColor(m.mode) }} />
-              {m.label} {m.count}
-            </span>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="leader 子树" hint="一格 = 一个唯一键。同一个键的 4 个模式只画一次">
-        <div className="space-y-1">
+      ),
+    },
+    {
+      id: "modes",
+      title: "模式分布",
+      hint: "日常主要在 Normal 模式,那一段最宽是正常的",
+      render: () => (
+        <>
+          <div className="flex h-7 overflow-hidden rounded">
+            {modes.map((m) => (
+              <div
+                key={m.mode}
+                className="flex items-center justify-center text-[10px] text-black"
+                style={{ width: `${(m.count / bindings.length) * 100}%`, background: modeColor(m.mode) }}
+                title={`${m.label}: ${m.count}`}
+              >
+                {m.count}
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-neutral-500">
+            {modes.map((m) => (
+              <span key={m.mode} className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-sm" style={{ background: modeColor(m.mode) }} />
+                {m.label} {m.count}
+              </span>
+            ))}
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "tree",
+      title: "leader 子树",
+      hint: "一格 = 一个唯一键。同一个键的 4 个模式只画一次",
+      render: () => (
+        <div className="space-y-2">
           {tree.map((n) => (
             <div key={n.prefix} className="flex items-start gap-2 text-xs">
-              <span className="w-20 shrink-0 pt-0.5 font-bold text-neutral-300">{n.prefix}</span>
-              <div className="flex-1">
-                <div className="mb-0.5 h-1 rounded bg-neutral-800" style={{ width: `${(n.count / maxTree) * 100}%` }} />
+              <span className="w-16 shrink-0 pt-0.5 font-bold text-neutral-300">{n.prefix}</span>
+              <div className="min-w-0 flex-1">
+                <div
+                  className="mb-1 h-0.5 rounded bg-neutral-800"
+                  style={{ width: `${(n.count / maxTree) * 100}%` }}
+                />
                 <div className="flex flex-wrap gap-1">
                   {n.children.map((c) => (
                     <span
@@ -113,7 +127,7 @@ export default function StatsView({
                       className="rounded border border-neutral-800 px-1 text-[10px] text-neutral-400"
                       title={`关卡 ${c.levels.join(", ")}`}
                     >
-                      {c.key.slice(7)}
+                      {c.key.slice(7) || "␣"}
                       {c.levels.length > 1 && <span className="ml-0.5 text-neutral-600">×{c.levels.length}</span>}
                     </span>
                   ))}
@@ -122,9 +136,13 @@ export default function StatsView({
             </div>
           ))}
         </div>
-      </Section>
-
-      <Section title="按键长度" hint="序列越长越难记。平均 2 以上就该警惕">
+      ),
+    },
+    {
+      id: "length",
+      title: "按键长度",
+      hint: "序列越长越难记。平均 2.5 以上标黄",
+      render: () => (
         <table className="w-full text-xs">
           <thead>
             <tr className="text-neutral-600">
@@ -147,18 +165,20 @@ export default function StatsView({
             ))}
           </tbody>
         </table>
-      </Section>
-    </div>
-  );
-}
+      ),
+    },
+  ];
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h2 className="mb-1 text-sm font-bold text-neutral-300">{title}</h2>
-      {hint && <p className="mb-2 text-[11px] text-neutral-600">{hint}</p>}
-      {children}
-    </section>
+    <div className="space-y-8">
+      {sections.filter((s) => show(s.id)).map((s) => (
+        <section key={s.id}>
+          <h2 className="mb-1 text-sm font-bold text-neutral-300">{s.title}</h2>
+          {s.hint && <p className="mb-2 text-[11px] text-neutral-600">{s.hint}</p>}
+          {s.render()}
+        </section>
+      ))}
+    </div>
   );
 }
 

@@ -1,0 +1,28 @@
+-- 把 nvim 的窗口布局导出给 reflex 页面(/stats 的「我的 nvim」页签)。
+--
+-- ## 装法
+--
+-- 在 ~/.config/nvim/lua/plugins/ 下建一个文件,内容就是这一行:
+--
+--   return { "/home/anguish/workspace/reflex/scripts/reflex-layout-plugin.lua" }
+--
+-- lazy.nvim 会把它当普通插件目录加载并执行。重启 nvim 即生效。
+--
+-- ## 为什么只是个只读旁路
+--
+-- 它**不接管任何键位、不改任何编辑行为**,只往
+-- stdpath("state")/reflex-layout.json 写一份布局快照。
+-- 把上面那行删掉,它就彻底不存在,不留痕迹。
+--
+-- 这点是从 dojo 的教训来的:dojo 之所以难维护,是因为它要接管按键、
+-- 转发原映射、处理 buffer-local 恢复 —— 全是为了"判分"。
+-- 而这里不需要判分,只需要看一眼,所以不该付那个代价。
+--
+-- ## 代价
+--
+-- 每次切窗口/换 tab/开关 buffer 会写一次 JSON(去抖 150ms)。
+-- 一份几百字节的文件,量级可以忽略。但如果你介意,改成手动:
+--   :lua require("reflex_layout").dump()
+-- 那就把下面的 autocmd 注册去掉,只在需要时手动调。
+
+return dofile(vim.fn.expand("~/workspace/reflex/scripts/nvim-dump-layout.lua")).attach()
