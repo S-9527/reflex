@@ -124,7 +124,15 @@ export default function Page() {
       // 必须拦,否则 Ctrl+W 关标签页、Ctrl+T 开新页
       e.preventDefault();
 
-      if (phase === "correct" || phase === "wrong") return;
+      // 反馈期间按任意键 → 立刻进下一题,不等自动翻页。
+      //
+      // ⚠️ 原来这里是 `return`,把键静默吞掉。实测踩到:答对后 700ms 内
+      // 按键毫无反应,用户(和我自己)都以为页面卡死了。
+      // 静默吞输入是最难查的一类问题 —— 界面上看不出任何异常。
+      if (phase === "correct" || phase === "wrong") {
+        next();
+        return;
+      }
 
       clearTimer();
       const nowTyped = [...typed, k.vim];
@@ -241,7 +249,10 @@ export default function Page() {
           </div>
 
           {msg && (
-            <div className={`text-xs ${phase === "correct" ? "text-green-400" : "text-red-400"}`}>{msg}</div>
+            <div className={`text-xs ${phase === "correct" ? "text-green-400" : "text-red-400"}`}>
+              {msg}
+              <span className="ml-3 text-neutral-600">按任意键继续</span>
+            </div>
           )}
 
           {phase === "idle" && typed.length > 0 && candidates.length > 0 && (

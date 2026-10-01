@@ -25,19 +25,39 @@ describe("normalize", () => {
     expect(normalize(ev("w", { shiftKey: true }))?.vim).toBe("W");
   });
 
-  it("Ctrl+w 变成 <C-w>", () => {
-    expect(normalize(ev("w", { ctrlKey: true }))?.vim).toBe("<C-w>");
+  it("Ctrl+字母 抬成大写(Vim 约定),用实测输入", () => {
+    // 实测(Playwright 真实按键,不是合成事件):
+    //   按 Ctrl+H → key="h" ctrl=true shift=false
+    //   按 Ctrl+J → key="j" ctrl=true shift=false
+    // 而 nvim_get_keymap 报的是 <C-H> / <C-J>(修饰键后大写)。
+    // 不抬这一手 → 归一化产 <C-h>,和数据集永远对不上。
+    expect(normalize(ev("h", { ctrlKey: true }))?.vim).toBe("<C-H>");
+    expect(normalize(ev("j", { ctrlKey: true }))?.vim).toBe("<C-J>");
+    expect(normalize(ev("w", { ctrlKey: true }))?.vim).toBe("<C-W>");
+    expect(normalize(ev("s", { ctrlKey: true }))?.vim).toBe("<C-S>");
+    expect(normalize(ev("f", { ctrlKey: true }))?.vim).toBe("<C-F>");
+    expect(normalize(ev("b", { ctrlKey: true }))?.vim).toBe("<C-B>");
   });
 
-  it("Ctrl+Shift+w 仍是 <C-w>(Vim 记法里 W 由 rhs 决定,不重复记)", () => {
-    // 这是最容易写错的一条:Ctrl+W 在 Vim 里通常记作 <C-W>,
-    // 但浏览器给的是 key="W" ctrlKey=true,我们要保留大写信息
-    const r = normalize(ev("W", { ctrlKey: true }));
-    expect(r?.vim).toBe("<C-W>");
+  it("Ctrl+已是大写的输入也不重复处理", () => {
+    expect(normalize(ev("H", { ctrlKey: true }))?.vim).toBe("<C-H>");
   });
 
-  it("Ctrl+Alt+a 是 <C-M-a>", () => {
-    expect(normalize(ev("a", { ctrlKey: true, altKey: true }))?.vim).toBe("<C-M-a>");
+  it("Ctrl+符号键不参与大写化", () => {
+    // 这些本来就不是字母,实测浏览器行为是 key="_" / key="/"
+    expect(normalize(ev("_", { ctrlKey: true }))?.vim).toBe("<C-_>");
+    expect(normalize(ev("/", { ctrlKey: true }))?.vim).toBe("<C-/>");
+  });
+
+  it("Ctrl+特殊键走命名表,修饰键放尖括号内", () => {
+    // 注意是 <C-Up> 不是 <C-ArrowUp>:ArrowUp 先经 NAMED 表变成 <Up>,
+    // 修饰键加在尖括号内。这正好等于数据集里的 <C-Up>(窗口调整大小)。
+    expect(normalize(ev("ArrowUp", { ctrlKey: true }))?.vim).toBe("<C-Up>");
+    expect(normalize(ev("ArrowLeft", { ctrlKey: true }))?.vim).toBe("<C-Left>");
+  });
+
+  it("Ctrl+Alt+a 是 <C-M-A>(修饰键后字母一律大写)", () => {
+    expect(normalize(ev("a", { ctrlKey: true, altKey: true }))?.vim).toBe("<C-M-A>");
   });
 
   it("特殊键走命名表", () => {

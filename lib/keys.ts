@@ -81,11 +81,22 @@ export function normalize(e: {
     // 哨兵没有大小写之分,chUpper 留 null(留给匹配器跳过双查)。
     if (e.key === " ") return { vim: core, ch: "␣", chUpper: null };
   } else if (e.key.length === 1) {
-    // 可打印字符。真实浏览器在按住 Shift 时已经把 key 变成大写,
-    // 但仍要自己抬一手:万一收到 "w"+shiftKey,也得还原成 W。
-    // 用户只看得见字符,不该让他看到 "shift-w"。
-    const ch = e.shiftKey ? e.key.toUpperCase() : e.key;
-    // 修饰键在尖括号**外面** <C-a> / <M-a>
+    // 可打印字符。
+    //
+    // ⚠️ 关键:带修饰键时,字母**一律大写**。
+    //
+    // 实测(真实 Playwright 按键,不是合成事件):
+    //   按 Ctrl+H → KeyboardEvent.key = "h"  ctrl=true  shift=false
+    //   按 Ctrl+J → KeyboardEvent.key = "j"  ctrl=true  shift=false
+    //
+    // 而 Vim 记法约定修饰键后是大写:`<C-H>` `<C-J>` `<C-S>`。
+    // 不抬这一手,归一化会产出 `<C-h>`,和数据集里的 `<C-H>` 永远对不上 ——
+    // 实测踩到:第 1 关 4 条窗口导航键全部无法完成。
+    //
+    // 注意这和 Shift 的处理是两件事:
+    //   Shift+H → key 已经是 "H"(浏览器行为),我们只兜底不抬
+    //   Ctrl+H  → key 是 "h",但 Vim 记法要 "H",必须抬
+    const ch = e.shiftKey || modPrefix ? e.key.toUpperCase() : e.key;
     core = modPrefix ? `<${modPrefix}${ch}>` : ch;
     lookupCh = ch;
   } else {
