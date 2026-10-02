@@ -46,8 +46,8 @@ function newNode(): Node {
 
 export type MatchResult =
   | { kind: "idle" }
-  /** 精确命中 */
-  | { kind: "hit"; binding: Binding }
+  /** 精确命中。extendable 表示该前缀还有子节点(可能只是另一个序列的开头) */
+  | { kind: "hit"; binding: Binding; extendable: boolean }
   /** 前缀有效,还在等后续键 */
   | { kind: "partial"; candidates: Binding[]; extendable: boolean }
   /** 前缀无效 —— 已按的键不对 */
@@ -101,7 +101,14 @@ export function match(root: Node, typed: string[], pool: Binding[] = []): MatchR
     node = next;
   }
 
-  if (node.terminal) return { kind: "hit", binding: node.terminal };
+  // 命中了,但这个前缀**还可能是别的序列的开头** —— 比如 g 既是终点,
+  // 又有 gd / gr 之类的子节点。
+  //
+  // ⚠️ extendable 必须一并返回:调用方要用它决定"序列是否结束"。
+  // 少了它,按到 g 就立刻判死,而用户本来要按的是 gd。
+  if (node.terminal) {
+    return { kind: "hit", binding: node.terminal, extendable: node.children.size > 0 };
+  }
 
   // 前缀有效但不是终点:收集该前缀下的所有绑定。
   // typed 非空走到这里,必然至少有 partial 候选或 hit,不会是 idle ——

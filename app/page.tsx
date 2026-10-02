@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { normalize, splitLhs, firstKeySet, shouldIntercept, excludeFirstKeys } from "@/lib/keys";
+import { normalize, splitLhs, firstKeySet, excludeFirstKeys } from "@/lib/keys";
+import { shouldTake, push, type LeaderState } from "@/lib/leader";
 import { buildIndex, match, type Binding } from "@/lib/matcher";
 import { load, save, record, pickNext, summarize, reset, type Progress } from "@/lib/progress";
 import { RAW, GROUPS, LEVEL_NAMES } from "@/lib/bindings";
@@ -15,7 +16,21 @@ const BINDINGS = RAW.map((r) => ({
   descEn: r.desc,
   desc: translate(r.display, r.mode, r.desc),
 })) as Binding[];
+// ⚠️ 索引必须建在 **全量** BINDINGS 上,不能用 TRAINABLE。
+// 匹配是全局的:<Space>ff 之类的序列会走到 f、f 两级,而 f 本身
+// 也可能是别的绑定(<Space>f 开头的文件查找)的首键。
+// 索引小一号不会立刻报错,只在某些题上突然"按对了却判错" ——
+// 这种 bug 只有逐题试才看得出来。
 const INDEX = buildIndex(BINDINGS);
+
+/**
+ * 首页实际出题的池子:去掉第 1 关(窗口键)。
+ *
+ * 第 1 关那 8 条交给 /windows 的可视化页面 —— 那里能画出真实分屏树,
+ * 首页只能让你盲背序列。**只是不在这儿出题,数据集本身不动**,
+ * 所以 /stats 的统计和已记录的进度都不受影响。
+ */
+const TRAINABLE = BINDINGS.filter((b) => b.level !== 1);
 
 /**
  * 只接管「数据集里可能作为第一键」的按键。
@@ -44,7 +59,12 @@ export default function Page() {
   // 显示错的数字 —— 后者更糟,会让人以为进度丢了)。
   const [progress, setProgress] = useState<Progress | null>(null);
   const [current, setCurrent] = useState<Binding | null>(null);
-  const [typed, setTyped] = useState<string[]>([]);
+  // ⚠️ typed 和 pending 必须放在**同一个** state 里。
+// 分成两个 useState 会出现"pending 已 true 但 typed 还是旧值"的中间态,
+// 而 shouldTake 读的就是 pending —— 那种帧里续键会被放行。
+// 实测这类不同步 bug 最难查:界面看不出异常,只是某个键"偶尔"失灵。
+const [seq, setSeq] = useState<LeaderState>({ typed: [], pending: false });
+const typed = seq.typed;
   const [phase, setPhase] = useState<Phase>("idle");
   const [msg, setMsg] = useState("");
   const [candidates, setCandidates] = useState<Binding[]>([]);
@@ -53,7 +73,12 @@ export default function Page() {
   // progressRef:让 next()/commit() 读到最新 progress 而不重建闭包
   const progressRef = useRef<Progress>({});
 
-  const [stats, setStats] = useState({ total: BINDINGS.length, mastered: 0, shaky: 0, fresh: BINDINGS.length });
+  const [stats, setStats] = useState({
+  total: TRAINABLE.length,
+  mastered: 0,
+  shaky: 0,
+  fresh: TRAINABLE.length,
+});
   const [level, setLevel] = useState<number | "all">(1);
   // 牺牲 <Tab> 键换键盘焦点导航。数据集里有一条 <Tab>(snippet 跳转),
   // 接管它就意味着 Tab 不再移动焦点 —— 所以做成可选,而不是替你决定。
@@ -67,11 +92,16 @@ export default function Page() {
     const p = load();
     progressRef.current = p;
     setProgress(p);
-    setStats(summarize(p, BINDINGS));
+    setStats(summarize(p, TRAINABLE));
   }, []);
 
-  const pool = useMemo(
-    () => (level === "all" ? BINDINGS : BINDINGS.filter((b) => b.level === level)),
+  // ⚠️ 过滤掉第 1 关(窗口键)。
+// 窗口键改由 /windows 的可视化训练负责 —— 那里能画出真实的分屏树,
+// 而首页只能让你盲背 <Space>| 这种序列。第 1 关 8 条全部在这里练,
+// 对肌肉记忆没有额外收益,反而和可视化页面重复。
+// 注意是「过滤」而不是删数据集:/stats 仍会统计它们,进度不丢。
+const pool = useMemo(
+    () => (level === "all" ? TRAINABLE : TRAINABLE.filter((b) => b.level === level)),
     [level],
   );
   // poolRef:让 next() 读最新 pool,同时保持 next 的引用稳定。
@@ -89,7 +119,7 @@ export default function Page() {
     const b = pickNext(poolRef.current, progressRef.current, recent.current.slice(-4));
     if (!b) return;
     setCurrent(b);
-    setTyped([]);
+    setSeq({ typed: [], pending: false });
     setPhase("idle");
     setMsg("");
     setCandidates([]);
@@ -113,13 +143,34 @@ export default function Page() {
     }
   };
 
+  /**
+   * 进入"还在等续键"状态后起超时。
+   *
+   * 抽出来是因为 hit-with-extendable 和 partial 两条分支都要用,
+   * 而它们的提示文案不一样:一个是"你按的这个键本身是 X",
+   * 一个是"这个前缀下有这些候选"。
+   */
+  const startPartialTimer = (typedSoFar: string[], shown: Binding | Binding[]) => {
+    const cands = Array.isArray(shown) ? shown : [shown];
+    clearTimer();
+    timer.current = setTimeout(() => {
+      if (!current) return;
+      setSeq({ typed: [], pending: false });
+      commit(
+        false,
+        `超时。你按了 ${typedSoFar.join("")},正确答案是 ${current.display}`,
+        cands,
+      );
+    }, TIMEOUT_MS);
+  };
+
   const commit = useCallback(
     (ok: boolean, text: string, cands: Binding[] = []) => {
       if (!current) return;
       const np = record(progressRef.current, current.id, ok);
       progressRef.current = np;
       setProgress(np);
-      setStats(summarize(np, BINDINGS));
+      setStats(summarize(np, TRAINABLE));
       save(np);
       setPhase(ok ? "correct" : "wrong");
       setMsg(text);
@@ -137,9 +188,15 @@ export default function Page() {
       const k = normalize(e);
       if (!k) return; // 纯修饰键
 
-      // 只接管数据集里存在的键。其余(F5 刷新、F12 开发者工具、Ctrl+P 打印)
-      // 放行给浏览器 —— 无条件 preventDefault 会把这些全抢走。
-      if (!shouldIntercept(k.vim, interceptSet)) return;
+      // 接管判据统一在 lib/leader.ts:
+      //   idle    → 只收第一键(不劫持 F5/F12/Ctrl+P)
+      //   pending → 无条件收(此刻任何字符都可能是续键)
+      //
+      // ⚠️ 原来这里用 shouldIntercept(k.vim, firstKeySet) —— 而
+      // firstKeySet 只含每个序列的**第一个**键,于是 `<Space>|` 的续键
+      // `|` 从来不在集合里,按了就被放行给浏览器,序列卡住。
+      // 实测:290 条里 206 条(71%)的多键序列都按不到终点。
+      if (!shouldTake(k.vim, seq, interceptSet)) return;
       e.preventDefault();
 
       // 反馈期间按任意键 → 立刻进下一题,不等自动翻页。
@@ -153,31 +210,36 @@ export default function Page() {
       }
 
       clearTimer();
-      const nowTyped = [...typed, k.vim];
-      setTyped(nowTyped);
+      const nowTyped = [...seq.typed, k.vim];
 
       const r = match(INDEX, nowTyped, pool);
 
       if (r.kind === "hit") {
-        if (r.binding.id === current?.id) {
-          commit(true, `✓ ${r.binding.display} — ${r.binding.desc}`);
+        // 到了终点。如果这个前缀还能延长(g 既是终点又是 gd 的开头),
+        // 不立刻判死 —— 留在 pending,等下一键或超时。
+        const nextSeq = push(seq, k.vim, { isTerminal: true, extendable: r.extendable });
+        setSeq(nextSeq);
+
+        if (!r.extendable) {
+          if (r.binding.id === current?.id) {
+            commit(true, `✓ ${r.binding.display} — ${r.binding.desc}`);
+          } else {
+            commit(
+              false,
+              `这个键是「${r.binding.desc}」,但本题要的是「${current?.desc}」`,
+              [r.binding],
+            );
+          }
         } else {
-          commit(
-            false,
-            `这个键是「${r.binding.desc}」,但本题要的是「${current?.desc}」`,
-            [r.binding],
-          );
+          setCandidates([r.binding]);
+          startPartialTimer(nextSeq.typed, r.binding);
         }
       } else if (r.kind === "partial") {
+        setSeq(push(seq, k.vim, { isTerminal: false, extendable: true }));
         setCandidates(r.candidates);
-        timer.current = setTimeout(() => {
-          commit(
-            false,
-            `超时。你按了 ${nowTyped.join("")},正确答案是 ${current?.display}`,
-            r.candidates,
-          );
-        }, TIMEOUT_MS);
+        startPartialTimer(nowTyped, r.candidates);
       } else if (r.kind === "miss") {
+        setSeq({ typed: [], pending: false });
         commit(false, `按到 ${k.vim} 就断了。本题答案:${current?.display}`, r.expected);
       }
       // r.kind === "idle" 在这里不可能:nowTyped 至少有一个键。
@@ -190,15 +252,28 @@ export default function Page() {
       window.removeEventListener("keydown", onKey, { capture: true });
       clearTimer();
     };
-  }, [typed, current, phase, pool, commit]);
+  }, [seq, current, phase, pool, commit]);
 
-  const levels = useMemo(() => [...new Set(BINDINGS.map((b) => b.level))].sort((a, b) => a - b), []);
+  // ⚠️ 必须从 **pool** 推,不能从 BINDINGS 推。
+// 否则「全部」那一档会把第 1 关的按钮显示出来,点进去发现一道题都没有。
+// ⚠️ levels 必须从 **BINDINGS** 算,不能从 pool 算。
+// pool 会排除第 1 关(那是刻意的),若 levels 也跟着排除,
+// 「全部」那一档就会算成 0 —— 实测踩到:按钮显示「全部(0)」,
+// 一道题都没有。关卡列表是"有哪些关卡",和"当前档出哪些题"是两件事。
+// ⚠️ 两处刻意用不同的数据源,别"顺手统一":
+//   levels ← BINDINGS  (有哪些关卡按钮)
+//   pool   ← 过滤掉 1  (实际出题,窗口键交给 /windows)
+// 早期版本让 levels 也从 pool 算,结果「全部」显示 0 题。
+const levels = useMemo(() => [...new Set(BINDINGS.map((b) => b.level))].sort((a, b) => a - b), []);
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8 font-mono">
       <h1 className="text-xl font-bold">reflex</h1>
       <p className="mt-1 text-xs text-neutral-500">
-        按键序列训练 · 数据集来自本机 LazyVim 16.0.1 实测抽取({BINDINGS.length} 条)
+        按键序列训练 · 数据集来自本机 LazyVim 16.0.1 实测抽取({pool.length} 条;窗口键已移至
+        <a href="/windows" className="text-blue-400 hover:underline">
+          可视化窗口练习
+        </a>)
       </p>
 
       <div className="mt-4 flex flex-wrap gap-4 text-xs">
@@ -234,7 +309,7 @@ export default function Page() {
             const empty: Progress = {};
             progressRef.current = empty;
             setProgress(empty);
-            setStats(summarize(empty, BINDINGS));
+            setStats(summarize(empty, TRAINABLE));
             recent.current = [];
             next();
           }}
@@ -244,13 +319,26 @@ export default function Page() {
       </div>
 
       <div className="mt-4 mb-6 flex flex-wrap gap-1.5">
-        {levels.map((l) => (
-          <LevelBtn key={l} active={level === l} onClick={() => setLevel(l)}>
-            {LEVEL_NAMES[l] ?? `第 ${l} 关`}
-          </LevelBtn>
-        ))}
+        {levels.map((l) =>
+          l === 1 ? (
+            // 第 1 关(窗口键)不在首页出题,按钮换成去可视化页面的入口。
+            // 直接删掉按钮会让人以为"少了一关数据丢了",不如指个去处。
+            <a
+              key={l}
+              href="/windows"
+              title="窗口键在可视化页面练"
+              className="rounded border border-dashed border-neutral-700 px-2 py-1 text-xs text-neutral-600 hover:border-blue-500 hover:text-blue-400"
+            >
+              窗口键 → /windows
+            </a>
+          ) : (
+            <LevelBtn key={l} active={level === l} onClick={() => setLevel(l)}>
+              {LEVEL_NAMES[l] ?? `第 ${l} 关`}
+            </LevelBtn>
+          ),
+        )}
         <LevelBtn active={level === "all"} onClick={() => setLevel("all")}>
-          全部({BINDINGS.length})
+          全部({TRAINABLE.length})
         </LevelBtn>
       </div>
 

@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { windowNavDir } from "@/lib/keys";
 import {
+  push as leaderPush,
+  reset as leaderReset,
+  type LeaderState,
+} from "@/lib/leader";
+import {
   initial,
   split,
   close,
@@ -88,7 +93,8 @@ export default function SplitDrill() {
   const [showAns, setShowAns] = useState(false);
   /** 已按下但还没完成的 leader 序列,如 "<Space>" / "<Space>w" */
   const [pendingLabel, setPendingLabel] = useState<string | null>(null);
-  const seqRef = useRef("");
+  /** leader 序列状态。类型和首页一致 —— 同一个概念只允许一个实现 */
+  const seqRef = useRef<LeaderState>({ typed: [], pending: false });
 
   const task = TASKS[ti];
   const done = shape(v.layout) === task.target;
@@ -97,7 +103,7 @@ export default function SplitDrill() {
     setV({ layout: initial(), focus: 1 });
     setLog([]);
     setShowAns(false);
-    seqRef.current = "";
+    seqRef.current = leaderReset();
     setPendingLabel(null);
   }, []);
 
@@ -126,7 +132,11 @@ export default function SplitDrill() {
       const dir = windowNavDir(e);
       if (dir) {
         e.preventDefault();
-        seqRef.current = "";
+        // 用 lib/leader 的 reset(),和首页共用同一个"回到起点"语义。
+        // 之前这里是手写 `seqRef.current = ""`,两处各写一份 ——
+        // 同概念两实现正是这次 71% 序列失效的根因。
+        seqRef.current = leaderReset();
+        setPendingLabel(null);
         act((cur) => {
           const n = moveFocus(cur.layout, cur.focus, dir);
           return n === null ? null : { layout: cur.layout, focus: n };
@@ -142,25 +152,37 @@ export default function SplitDrill() {
       if (["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"].includes(e.key)) return;
       if (e.ctrlKey || e.altKey) return; // 其余带修饰键的一律放行
 
-      // 按下 <Space> 开序列
+      // 按下 <Space> 开序列 —— 用 lib/leader.push 累积,和首页同一套语义
       if (e.key === " ") {
         e.preventDefault();
-        seqRef.current = " ";
+        seqRef.current = leaderPush(seqRef.current, "<Space>", {
+          isTerminal: false,
+          extendable: true,
+        });
         setPendingLabel("<Space>");
         return;
       }
 
-      const seq = seqRef.current;
-      if (!seq) return; // 不在序列里 —— 放行,别劫持普通按键
+      // pending 时无条件接管 —— 和首页 shouldTake 的判据一致。
+      // 这一页没有 firstKeySet 可用(只认三个分屏键),
+      // 但"序列中间不放过任何键"这条规则必须一样。
+      if (!seqRef.current.pending) return; // 不在序列里 —— 放行,别劫持普通按键
 
       e.preventDefault();
+      // ⚠️ 必须用逐键数组拼,不能 join("") 再和 key 字符串比。
+      // <Space> 的 Vim 记法是 "<Space>"(7 个字符),join 出来是 "<Space>|",
+      // 而 `next === " |"` 比的是 **浏览器原始字符**,永远是 false。
+      // 实测踩到:分屏完全不响应,但界面上看不出任何异常。
+      // 正确做法:把 key 转成 Vim 记法后,和 typed 数组一起比。
       const ch = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      const next = seq + ch;
-      seqRef.current = "";
+      const vimCh = ch === " " ? "<Space>" : ch;
+      const nowTyped = [...seqRef.current.typed, vimCh];
+      const next = nowTyped.join("");
+      seqRef.current = leaderReset();
 
       // <Space>| 竖切。注意 `|` 需要 Shift+\ ,浏览器报的 key 就是 "|";
       // 万一报成 "\"(某些终端/输入法)也一并认,两者等价。
-      if (next === " |" || next === " \\" || next === " /") {
+      if (next === "<Space>|" || next === "<Space>\\" || next === "<Space>/") {
         setPendingLabel(null);
         act(
           (cur) => {
@@ -171,7 +193,7 @@ export default function SplitDrill() {
         );
         return;
       }
-      if (next === " -") {
+      if (next === "<Space>-") {
         setPendingLabel(null);
         act(
           (cur) => {
@@ -183,12 +205,21 @@ export default function SplitDrill() {
         return;
       }
       // <Space>w 是两击序列(<Space>wd = Delete Window),继续等下一个键
-      if (next === " w") {
-        seqRef.current = " w";
+      if (next === "<Space>w") {
+        // ⚠️ 必须把**完整两键**重新 push 回去,不能只 push "w" ——
+        // 上面已经 leaderReset() 把 seqRef 清空了,只 push "w"
+        // 会让 typed 变成 ["w"],下一键拼出来是 "wd" 而非 "<Space>wd",
+        // Delete Window 永远匹配不上。
+        //
+        // 逐键重放 nowTyped,而不是手写死两键 —— 手写过一次就错了。
+        seqRef.current = nowTyped.reduce<LeaderState>(
+          (st, key) => leaderPush(st, key, { isTerminal: false, extendable: true }),
+          leaderReset(),
+        );
         setPendingLabel("<Space>w");
         return;
       }
-      if (next === " wd") {
+      if (next === "<Space>wd") {
         setPendingLabel(null);
         act((cur) => {
           const l = close(cur.layout, cur.focus);
