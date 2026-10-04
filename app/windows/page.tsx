@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import WindowsDrill from "./drill";
 import SplitDrill from "./split";
+import HydraDrill from "./hydra";
 
 /**
  * 窗口练习 —— 两个模式。
@@ -14,7 +15,7 @@ import SplitDrill from "./split";
  * 分开是因为判分方式完全不同:跳转看「焦点落在哪」,
  * 搭建看「最终形状对不对」。混在一起会互相干扰。
  */
-type Mode = "jump" | "build";
+type Mode = "jump" | "build" | "hydra";
 
 export default function WindowsPage() {
   const [mode, setMode] = useState<Mode>("jump");
@@ -31,6 +32,7 @@ export default function WindowsPage() {
           [
             ["jump", "跳转", "在已有布局里跳来跳去"],
             ["build", "搭建", "把目标布局拼出来"],
+            ["hydra", "键位", "照 which-key 面板练单个键"],
           ] as const
         ).map(([id, label, desc]) => (
           <button
@@ -57,15 +59,21 @@ export default function WindowsPage() {
               (本机没有裸 hjkl 的映射,不收)
             </span>
           </>
-        ) : (
+        ) : mode === "build" ? (
           <>
             用 <kbd>&lt;Space&gt;|</kbd> 竖切、<kbd>&lt;Space&gt;-</kbd> 横切、<kbd>&lt;C-H/J/K/L&gt;</kbd>{" "}
             跳窗口,拼出目标布局
           </>
+        ) : (
+          <>
+            照着下面的面板按键 —— 练的是<strong>单个键的反射</strong>,不用先按 leader
+          </>
         )}
       </p>
 
-      <div className="mt-5">{mode === "jump" ? <WindowsDrill /> : <SplitDrill />}</div>
+      <div className="mt-5">
+        {mode === "jump" ? <WindowsDrill /> : mode === "build" ? <SplitDrill /> : <HydraDrill />}
+      </div>
     </main>
   );
 }
