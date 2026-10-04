@@ -157,6 +157,30 @@ describe("数据完整性", () => {
     for (const s of SPEC) expect(s.desc, `${s.key} 缺说明`).toBeTruthy();
   });
 
+  /**
+   * ⚠️ React 的 key 只能用 id,不能用 textobject 名 ——
+   * 因为 SPEC 里 iw 有两条(光标在词首 / 词中,两次不同的实测)。
+   * 用 `key={s.key}` 渲染会撞
+   * 「Encountered two children with the same key, `iw`」(用户报过)。
+   * 所以 id 必须唯一。
+   */
+  it("id 唯一(React key 用它)", () => {
+    const seen = new Set(SPEC.map((s) => s.id));
+    expect(seen.size).toBe(SPEC.length);
+  });
+
+  it("key 允许重复 —— 同类对象的多次实测是正常的", () => {
+    // 这不是 bug:iw 确实有多条实测记录。所以只能靠 id 去重。
+    const iwCount = SPEC.filter((s) => s.key === "iw").length;
+    expect(iwCount).toBeGreaterThan(1);
+  });
+
+  it("id 要能看出是哪个键 + 哪个位置", () => {
+    for (const s of SPEC) {
+      expect(s.id.includes(s.key), `${s.id} 里看不出是哪个键`).toBe(true);
+    }
+  });
+
   it("四个操作符都在(d/c/y/v)", () => {
     expect(OPERATORS.map((o) => o.key)).toEqual(["d", "c", "y", "v"]);
   });

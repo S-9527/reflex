@@ -45,6 +45,15 @@ export type ObjKind = "word" | "quote" | "paren" | "brace" | "block" | "para" | 
 export type Edge = "inner" | "around";
 
 export type ObjSpec = {
+  /**
+   * 唯一 id。
+   *
+   * ⚠️ 不能拿 `key` 当 React 的 key —— `iw` 在 SPEC 里有**两条**
+   * (光标在词首 / 光标在词中,两次不同的实测)。用 `key` 渲染会撞
+   * 「two children with the same key」。`key` 是 textobject 名,
+   * 可以重复;`id` 才是这一行的身份。
+   */
+  id: string;
   /** 面板上的写法,如 "iw" */
   key: string;
   kind: ObjKind;
@@ -80,42 +89,43 @@ export const SRC: Doc = [
  *   (结果里 `|` 标记的是原来光标所在列,方便看边界;无标记就是整行变化)
  */
 export const SPEC: ObjSpec[] = [
-  { key: "iw", kind: "word", edge: "inner", desc: "词(不含后面的空白)",
+  { id: "iw@词首", key: "iw", kind: "word", edge: "inner", desc: "词(不含后面的空白)",
     measured: { doc: SRC, line: 1, col: 1, result: " |total = compute(a, b) + 1" } },
-  { key: "aw", kind: "word", edge: "around", desc: "词 + 后面的空白",
+  { id: "aw@词首", key: "aw", kind: "word", edge: "around", desc: "词 + 后面的空白",
     measured: { doc: SRC, line: 1, col: 1, result: "|total = compute(a, b) + 1" } },
-  { key: "iw", kind: "word", edge: "inner", desc: "词(光标在词中间也一样)",
+  // 同类对象的第二次实测,光标在词中间 —— 证明范围与光标在词内何处无关
+  { id: "iw@词中", key: "iw", kind: "word", edge: "inner", desc: "词(光标在词中间也一样)",
     measured: { doc: SRC, line: 1, col: 7, result: "local | = compute(a, b) + 1" } },
-  { key: "ie", kind: "word", edge: "inner", desc: "词尾(到单词末尾,不带尾空白)",
+  { id: "ie@词中", key: "ie", kind: "word", edge: "inner", desc: "词尾(到单词末尾,不带尾空白)",
     measured: { doc: SRC, line: 1, col: 7, result: "local total = compute(a, b) + 1" } },
 
-  { key: "i\"", kind: "quote", edge: "inner", desc: "双引号里的内容(不含引号)",
+  { id: "i\"", key: "i\"", kind: "quote", edge: "inner", desc: "双引号里的内容(不含引号)",
     measured: { doc: SRC, line: 2, col: 15, result: 'local name = "|"' } },
-  { key: "a\"", kind: "quote", edge: "around", desc: "双引号本身 + 内容",
+  { id: "a\"", key: "a\"", kind: "quote", edge: "around", desc: "双引号本身 + 内容",
     measured: { doc: SRC, line: 2, col: 15, result: "local name =|" } },
-  { key: "i'", kind: "quote", edge: "inner", desc: "单引号里的内容",
+  { id: "i'", key: "i'", kind: "quote", edge: "inner", desc: "单引号里的内容",
     measured: { doc: SRC, line: 5, col: 17, result: "  return { key = '| ' }" } },
-  { key: "a'", kind: "quote", edge: "around", desc: "单引号本身 + 内容",
+  { id: "a'", key: "a'", kind: "quote", edge: "around", desc: "单引号本身 + 内容",
     measured: { doc: SRC, line: 5, col: 17, result: "  return { key = |}" } },
 
-  { key: "i(", kind: "paren", edge: "inner", desc: "圆括号里的内容",
+  { id: "i(", key: "i(", kind: "paren", edge: "inner", desc: "圆括号里的内容",
     measured: { doc: SRC, line: 1, col: 21, result: "local total = compute(|) + 1" } },
-  { key: "a(", kind: "paren", edge: "around", desc: "圆括号本身 + 内容",
+  { id: "a(", key: "a(", kind: "paren", edge: "around", desc: "圆括号本身 + 内容",
     measured: { doc: SRC, line: 1, col: 21, result: "local total = compute |+ 1" } },
   // ⚠️ 实测:di) 和 di( 结果完全一样 —— Vim 里 i( 与 i) 等价,
   //   光标在括号内时随便按哪个都行。所以不另立 i) 条目,只在这里记一笔。
-  { key: "i{", kind: "brace", edge: "inner", desc: "花括号里的内容",
+  { id: "i{", key: "i{", kind: "brace", edge: "inner", desc: "花括号里的内容",
     measured: { doc: SRC, line: 5, col: 12, result: "  return {}" } },
-  { key: "a{", kind: "brace", edge: "around", desc: "花括号本身 + 内容",
+  { id: "a{", key: "a{", kind: "brace", edge: "around", desc: "花括号本身 + 内容",
     measured: { doc: SRC, line: 5, col: 12, result: "  return |" } },
-  { key: "ip", kind: "para", edge: "inner", desc: "段落(空行分隔)",
+  { id: "ip", key: "ip", kind: "para", edge: "inner", desc: "段落(空行分隔)",
     measured: { doc: SRC, line: 8, col: 1, result: "★整行没了,连空行一起(10→7 行)" } },
-  { key: "ap", kind: "para", edge: "around", desc: "段落 + 后面的空行",
+  { id: "ap", key: "ap", kind: "para", edge: "around", desc: "段落 + 后面的空行",
     measured: { doc: SRC, line: 8, col: 1, result: "★10 → 6 行(比 ip 多带一个空行)" } },
-  { key: "il", kind: "line", edge: "inner", desc: "当前行(实测首行删不掉 —— 见备注)" },
-  { key: "al", kind: "line", edge: "around", desc: "当前行 + 下面的空行" },
-  { key: "ii", kind: "indent", edge: "inner", desc: "缩进块", measured: { doc: SRC, line: 5, col: 3, result: "  return { key = 'val' }" } },
-  { key: "is", kind: "sentence", edge: "inner", desc: "整句",
+  { id: "il", key: "il", kind: "line", edge: "inner", desc: "当前行(实测首行删不掉 —— 见备注)" },
+  { id: "al", key: "al", kind: "line", edge: "around", desc: "当前行 + 下面的空行" },
+  { id: "ii", key: "ii", kind: "indent", edge: "inner", desc: "缩进块", measured: { doc: SRC, line: 5, col: 3, result: "  return { key = 'val' }" } },
+  { id: "is", key: "is", kind: "sentence", edge: "inner", desc: "整句",
     measured: { doc: SRC, line: 2, col: 15, result: "★整句被删,光标落到下一段(function f(x))" } },
 ];
 
