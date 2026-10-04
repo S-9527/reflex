@@ -13,6 +13,9 @@ import {
   goTo,
   stateFrom,
   applyTabKey,
+  SOLUTIONS,
+  normSeq,
+  toPanelKey,
   TAB_TASKS,
   type TabState,
 } from "../lib/tabs";
@@ -122,6 +125,71 @@ describe("goTo", () => {
   it("越界返回 null", () => {
     expect(goTo(st(3, 0), 5)).toBeNull();
     expect(goTo(st(3, 0), -1)).toBeNull();
+  });
+});
+
+describe("toPanelKey —— 浏览器 key 要转成面板记法", () => {
+  /**
+   * ⚠️ 这条踩过:浏览器里 <Tab> 的 key 是 "Tab"(没有尖括号),
+   * 代码直接拼成 `"<Tab>" .. e.key` 得到 `"<Tab>Tab"`,
+   * 查表必然 miss —— 表现为「新开标签页」那题永远报
+   * 「不在这一页的范围里」。用户截图报的就是这个。
+   */
+  it("<Tab> 的浏览器 key 正确转成 <Tab>", () => {
+    expect(toPanelKey("Tab")).toBe("<Tab>");
+  });
+
+  it("非特殊键原样返回", () => {
+    expect(toPanelKey("d")).toBe("d");
+    expect(toPanelKey("]")).toBe("]");
+    expect(toPanelKey("[")).toBe("[");
+    expect(toPanelKey("o")).toBe("o");
+    expect(toPanelKey("f")).toBe("f");
+    expect(toPanelKey("l")).toBe("l");
+  });
+
+  it("按真实按键拼出来的序列,每道题都命中自己的解法", () => {
+    // 每个 tab 操作:第一键都是浏览器报的 "Tab"
+    for (const t of TAB_TASKS) {
+      const seqs = SOLUTIONS[t.key].seqs;
+      for (const s of seqs) {
+        // 模拟:把面板记法反推回浏览器 key,再正向转回来
+        const browserKeys = s.map((x) => (x === "<Tab>" ? "Tab" : x));
+        const rebuilt = browserKeys.map(toPanelKey);
+        expect(normSeq(rebuilt), `${t.key} 反推失败`).toBe(normSeq(s));
+      }
+    }
+  });
+
+  it("⚠️ <Tab><Tab> 这一题:两个浏览器 key 都是 Tab", () => {
+    const s = SOLUTIONS["<Tab><Tab>"].seqs[0];
+    expect(s).toEqual(["<Tab>", "<Tab>"]);
+    const rebuilt = ["Tab", "Tab"].map(toPanelKey);
+    expect(rebuilt).toEqual(["<Tab>", "<Tab>"]);
+  });
+});
+
+describe("SOLUTIONS 完整性", () => {
+  it("每道题都有解法", () => {
+    for (const t of TAB_TASKS) {
+      expect(SOLUTIONS[t.key], `${t.key} 没有解法表`).toBeDefined();
+      expect(SOLUTIONS[t.key].seqs.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("每道题都有原生参考", () => {
+    for (const t of TAB_TASKS) {
+      expect(SOLUTIONS[t.key].native, `${t.key} 缺原生参考`).toBeTruthy();
+    }
+  });
+
+  it("每条解法都是 2 键(以 <Tab> 开头)", () => {
+    for (const t of TAB_TASKS) {
+      for (const s of SOLUTIONS[t.key].seqs) {
+        expect(s[0]).toBe("<Tab>");
+        expect(s.length).toBe(2);
+      }
+    }
   });
 });
 

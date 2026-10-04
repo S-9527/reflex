@@ -156,7 +156,75 @@ export function stateFrom(t: TabTask): TabState {
   return { tabs, cur: t.curIndex, nextId: tabs.length + 1 };
 }
 
-/** 题目键 → 操作。键用面板上的记法(带 <Tab>) */
+/**
+ * 每个操作的解法。
+ *
+ * ## 键位侧:每个操作**只绑了一个键**
+ *
+ * 按 rhs 聚合 `nvim_get_keymap("n")` 的结果 —— 七个 `<Tab>*` 操作
+ * 的 rhs 各不相同,每行下面都只有一个 lhs。所以 tab 这一族
+ * 没有 buffer 那样的同义键可挑,别硬凑。
+ *
+ * ## native 侧:逐条在真 nvim 里 feedkeys 验过
+ *
+ * ⚠️ 两个实测发现,不能照抄 Vim 文档:
+ *
+ * 1. **`:tn` / `:tl` 在本机不生效**。`:tabnext` 让 cur 1→2,
+ *    而 `:tn` 是 1→1(无变化)。所以这两个缩写**没有**写进 native ——
+ *    写上去等于教一个在你机器上不灵的东西。
+ * 2. **`:tabnext` 在末尾会绕回第一个**(cur 4→1),
+ *    但键位 `<Tab>]` 是**到头就停**。同一件事,两种行为。
+ *    这是最容易踩的一个,所以在界面上单独标了出来。
+ */
+export const SOLUTIONS: Record<
+  string,
+  { seqs: string[][]; native?: string; note?: string }
+> = {
+  "<Tab><Tab>": {
+    seqs: [['<Tab>', '<Tab>']],
+    native: ":tabnew  /  :tabe",
+    note: "新 tab 会带上当前窗口的窗口(和 :tab split 一样)",
+  },
+  "<Tab>d": { seqs: [['<Tab>', 'd']], native: ":tabclose  /  :tabc" },
+  "<Tab>o": { seqs: [['<Tab>', 'o']], native: ":tabonly  /  :tabo" },
+  "<Tab>]": {
+    seqs: [['<Tab>', ']']],
+    native: ":tabnext",
+    note: "⚠ 键位到头就停,但 :tabnext 会绕回第一个 —— 实测 cur 4→1",
+  },
+  "<Tab>[": {
+    seqs: [['<Tab>', '[']],
+    native: ":tabprevious",
+    note: "⚠ 别和 <Tab>] 混:那个到头停,这个到头也停(但方向相反)",
+  },
+  "<Tab>f": { seqs: [['<Tab>', 'f']], native: ":tabfirst" },
+  "<Tab>l": { seqs: [['<Tab>', 'l']], native: ":tablast" },
+};
+
+/** 把一个 Vim 记法序列归一化成可比对的字符串 */
+export function normSeq(seq: string[]): string {
+  return seq.join("|");
+}
+
+/**
+ * 把浏览器报的 e.key 转成面板记法。
+ *
+ * ⚠️ `<Tab>` 的浏览器 key 是 `"Tab"`(没尖括号),直接拼会得到
+ * `"<Tab>Tab"` —— 查表必然 miss。实测踩过:新开标签页那题
+ * 永远报「不在这一页的范围里」。
+ */
+export function toPanelKey(browserKey: string): string {
+  const NAMED: Record<string, string> = {
+    Tab: "<Tab>",
+    " ": "<Space>",
+    Enter: "<CR>",
+    Escape: "<Esc>",
+    Backspace: "<BS>",
+  };
+  return NAMED[browserKey] ?? browserKey;
+}
+
+/** 题目键 → 操作。键用面板上的记法(带尖括号) */
 export function applyTabKey(key: string, s: TabState): TabState | null {
   switch (key) {
     case "<Tab><Tab>": return newTab(s);
