@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import DrillShell from "@/app/drill-shell";
 import WindowsDrill from "./drill";
 import SplitDrill from "./split";
 import HydraDrill from "./hydra";
@@ -21,13 +21,8 @@ export default function WindowsPage() {
   const [mode, setMode] = useState<Mode>("jump");
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-8 font-mono">
-      <Link href="/" className="text-xs text-neutral-600 hover:text-neutral-400">
-        ← 回到训练
-      </Link>
-      <h1 className="mt-3 text-xl font-bold">窗口练习</h1>
-
-      <div className="mt-4 flex gap-1.5">
+    <DrillShell title="窗口练习">
+      <div className="flex gap-1.5">
         {(
           [
             ["jump", "跳转", "在已有布局里跳来跳去"],
@@ -55,25 +50,26 @@ export default function WindowsPage() {
           <>
             按 <kbd>&lt;C-H&gt;</kbd> <kbd>&lt;C-J&gt;</kbd> <kbd>&lt;C-K&gt;</kbd> <kbd>&lt;C-L&gt;</kbd>{" "}
             让焦点在窗口间跳
-            <span className="text-neutral-600">
-              (本机没有裸 hjkl 的映射,不收)
-            </span>
+            <span className="text-neutral-600">(本机没有裸 hjkl 的映射,不收)</span>
           </>
         ) : mode === "build" ? (
           <>
-            用 <kbd>&lt;Space&gt;|</kbd> 竖切、<kbd>&lt;Space&gt;-</kbd> 横切、<kbd>&lt;C-H/J/K/L&gt;</kbd>{" "}
-            跳窗口,拼出目标布局
+            用 <kbd>&lt;Space&gt;|</kbd> 竖切、<kbd>&lt;Space&gt;-</kbd> 横切、
+            <kbd>&lt;C-H/J/K/L&gt;</kbd> 跳窗口,拼出目标布局
           </>
         ) : (
           <>
-            照着下面的面板按键 —— 练的是<strong>单个键的反射</strong>,不用先按 leader
+            按 <kbd>&lt;Space&gt;</kbd>
+            <kbd>w</kbd>
+            <kbd>面板上的键</kbd> 三键连着按 —— 只练 LazyVim 这一套。
+            每题下面会标出本机实测存在的<b>更省事的等价键</b>和原生写法
           </>
         )}
       </p>
 
-      <div className="mt-5">
+      <div className="mt-4">
         {mode === "jump" ? <WindowsDrill /> : mode === "build" ? <SplitDrill /> : <HydraDrill />}
       </div>
-    </main>
+    </DrillShell>
   );
 }

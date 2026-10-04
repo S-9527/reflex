@@ -382,6 +382,56 @@ export function swapNext(l: Layout, focus: number): Layout | null {
   return { root: swapLeaves(l.root, ids[i], ids[j]), nextId: l.nextId };
 }
 
+/**
+ * 轮换焦点 —— `<C-w>W`。
+ *
+ * 按 `leaves` 的顺序(先 a 后 b,深度优先)走到下一个窗口,
+ * 到末尾回到第一个。所以它不是"几何上的邻居",而是**顺序上的下一个**,
+ * 和 `moveFocus` 的方向语义完全不同 —— 这正是这个键容易按错的原因。
+ */
+export function cycleFocus(l: Layout, focus: number): number | null {
+  const ids = leaves(l.root);
+  if (ids.length < 2) return null;
+  const i = ids.indexOf(focus);
+  if (i < 0) return null;
+  return ids[(i + 1) % ids.length];
+}
+
+/**
+ * 跳到第 n 个窗口 —— `<C-w>0` / `<C-w>1`。
+ *
+ * n 超出范围返回 null。注意 `<C-w>0` 的下标和直觉相反:
+ * Vim 里 `0` 指 Alternate File(上一个文件),不是"第一个"。
+ * 这里按**位置**建模,0 就是最左上的那个 —— 因为我们不模拟 buffer 历史。
+ */
+export function focusIndex(l: Layout, n: number): number | null {
+  const ids = leaves(l.root);
+  if (n < 0 || n >= ids.length) return null;
+  return ids[n];
+}
+
+/**
+ * 缩放 —— `<C-w>m`:只留当前窗口,再按一次恢复。
+ *
+ * ⚠️ 单靠 Layout 表达不了"再按一次恢复",因为要记住之前的样子。
+ * 所以这里只给**进入**缩放的操作(等价于 closeOthers),
+ * 退出由调用方保存/恢复 prev —— 组件里用一个 ref 存。
+ */
+export function zoomIn(l: Layout, focus: number): Layout | null {
+  return closeOthers(l, focus);
+}
+
+/**
+ * 交换任意两个窗口 —— `<C-w>Hx` / `<C-w>Jx` 这种两步操作的最后一步。
+ *
+ * 和 swapNext 的区别:swapNext 只能和"下一个"换,这个可以指定任意一个。
+ * 两者都只换 id、保留骨架,所以窗口内容换了位置而布局形状不变。
+ */
+export function swapTwo(l: Layout, x: number, y: number): Layout | null {
+  if (!contains(l.root, x) || !contains(l.root, y) || x === y) return null;
+  return { root: swapLeaves(l.root, x, y), nextId: l.nextId };
+}
+
 /** 交换两个叶子的 id,其余结构原样保留 */
 function swapLeaves(n: Node, x: number, y: number): Node {
   if (n.t === "leaf") {
@@ -403,6 +453,8 @@ export type Op = {
   swap?: true;
   others?: true;
   resize?: "v+" | "v-" | "h+" | "h-" | "maxv" | "maxh" | "eq";
+  /** 把焦点窗口和 dir 方向的兄弟窗口交换位置(Vim 的 `<C-w>Jx` 那种两步) */
+  swapWith?: "h" | "j" | "k" | "l";
 };
 
 /** 执行一串操作 —— 测试用,也是「解法示范」的底座 */
@@ -438,6 +490,13 @@ export function run(ops: Op[], start = initial()): { layout: Layout; focus: numb
     if (op.swap) {
       // 交换后焦点跟到原位置(窗口本身还在那儿,只是内容换了)
       settle(swapNext(l, focus), focus);
+      continue;
+    }
+    if (op.swapWith) {
+      const target = moveFocus(l, focus, op.swapWith);
+      if (target !== null) {
+        settle(swapTwo(l, focus, target), focus);
+      }
       continue;
     }
     if (op.resize) {

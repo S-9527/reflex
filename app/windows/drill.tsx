@@ -62,11 +62,25 @@ type State = {
   msg: { kind: "ok" | "info"; text: string } | null;
 };
 
+/**
+ * ⚠️ 这里必须**确定性**,不能随机。
+ *
+ * 实测踩到:原来 `makeTask` 内部随机挑目标,而这段跑在 `useState(initial)` 里 ——
+ * SSR 算一次、客户端 hydration 又算一次,两次结果不同,
+ * 于是 `isTarget` 不匹配 → hydration failed → React 丢弃整棵树重新生成
+ * → **所有按键 handler 全部失效**(表现为「按什么键都没反应」),
+ * 而且我加的任何新属性都会被丢掉,极难定位。
+ *
+ * 所以:初始题目固定挑一个确定的目标,随机只发生在用户点「换一题」时
+ * (那是纯客户端事件,不会有 SSR/CSR 不一致)。
+ */
 const initial = (): State => {
   const arena = ARENAS[2]; // 四宫格
-  const t = makeTask(arena, arena.start);
+  // 固定挑 index 1(右上):离 start(左上)一步之遥,首题简单且有意义。
+  // ⚠️ 不能用随机 —— 见上面的注释。
+  const to = arena.wins.length > 1 ? 1 : 0;
   return {
-    ai: 2, focus: arena.start, from: arena.start, to: t.to,
+    ai: 2, focus: arena.start, from: arena.start, to,
     steps: 0, best: null, solved: 0, justSolved: false, msg: null,
   };
 };

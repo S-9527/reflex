@@ -289,6 +289,12 @@ const levels = useMemo(() => [...new Set(BINDINGS.map((b) => b.level))].sort((a,
         <a href="/windows" className="text-blue-400 hover:underline">
           窗口练习 →
         </a>
+        <a href="/buffers" className="text-blue-400 hover:underline">
+          缓冲区 →
+        </a>
+        <a href="/tabs" className="text-blue-400 hover:underline">
+          标签页 →
+        </a>
         <a href="/stats" className="text-blue-400 hover:underline">
           数据集 →
         </a>
