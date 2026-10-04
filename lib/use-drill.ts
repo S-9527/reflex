@@ -131,12 +131,21 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
   const [flash, setFlash] = useState<Flash | null>(null);
   const [solved, setSolved] = useState<number[]>([]);
   /**
-   * 跨会话进度,首次渲染时从 localStorage 读一次。
+   * 跨会话进度。
    *
-   * ⚠️ 用 lazy initializer 而不是 useEffect —— useEffect 会在首屏
-   * 之后再改一次状态,按钮会先全灰再变绿,闪一下。
+   * ⚠️ 必须在 useEffect 里读,不能用 `useState(() => loadBoards())`。
+   * lazy initializer 在服务端求值时 localStorage 是 undefined,
+   * 服务端渲染出「全灰」而客户端是「全绿」→ **Hydration failed**
+   * (首页仪表盘踩过这个坑,控制台实测报错)。
+   *
+   * 初始为 `{}` = 服务端和客户端首屏一致(都没进度),
+   * 挂载后再补上。代价是按钮会先灰一下,可接受。
    */
-  const [boards, setBoards] = useState<BoardProgress>(() => loadBoards());
+  const [boards, setBoards] = useState<BoardProgress>({});
+
+  useEffect(() => {
+    setBoards(loadBoards());
+  }, []);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
