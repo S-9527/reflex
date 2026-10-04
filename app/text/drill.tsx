@@ -1,17 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
   SRC,
   SPEC,
-  OPERATORS,
+  BARE_LETTERS,
   locate,
   slice,
   findSpec,
   type ObjSpec,
-  type Operator,
   type Range,
 } from "@/lib/textobj";
+import type { DrillTask } from "@/lib/drill";
+import { defaultToPanelKey, useDrill } from "@/lib/use-drill";
+import {
+  AcceptList,
+  FlashLine,
+  KeyLog,
+  PendingHint,
+  Provenance,
+  TaskBar,
+  TaskBox,
+} from "@/lib/drill-ui";
 
 /**
  * 文本对象练习 —— 给你一段代码,高亮出「按这个键会选中哪一块」。
@@ -24,18 +33,22 @@ import {
  * 测法是破坏性的:造已知内容 → 落到指定位置 → `:normal! d{textobject}` → diff。
  * 每条实测结果都记在 lib/textobj.ts 的 `measured` 字段里,可复现。
  *
+ * ## 这一页修掉的一个死 bug
+ *
+ * 原来按键链路上 `q.obj.startsWith(k)` 拿整个 obj 去 startsWith 每次单键,
+ * 于是 `iw` 按到 `w` 时 `"iw".startsWith("w")` 恒为 false → 缓冲清空,
+ * **任何一题都按不到终点**。而且 `settle` 定义了但全文件从未被调用。
+ * 现在换成公共引擎的「前缀匹配 + 命中结算」,和另外四页同一套判据。
+ *
  * ## 核心只有一件事:inner vs around
  *
  *   diw → `local| total`   ← 留一个空格
  *   daw → `|total`        ← 连空格一起删
  *
  * 差一个字符,肉眼看不出来,但在真机上会留下多余空格。
- * 所以页面上永远把这两个并排放着对比。
  */
 type Q = {
-  /** 要找的 textobject */
   obj: string;
-  /** 光标落在第几行第几列 */
   line: number;
   col: number;
 };
@@ -44,145 +57,87 @@ const QUESTIONS: Q[] = [
   { obj: "iw", line: 1, col: 1 },
   { obj: "aw", line: 1, col: 1 },
   { obj: "iw", line: 1, col: 7 },
-  { obj: "iw", line: 2, col: 15 },
-  { obj: "a\"", line: 2, col: 15 },
-  { obj: "i'", line: 5, col: 17 },
-  { obj: "a'", line: 5, col: 17 },
+  { obj: 'i"', line: 2, col: 15 },
+  { obj: 'a"', line: 2, col: 15 },
+  { obj: "i'", line: 5, col: 19 },
+  { obj: "a'", line: 5, col: 19 },
   { obj: "i(", line: 1, col: 21 },
   { obj: "a(", line: 1, col: 21 },
   { obj: "i{", line: 5, col: 12 },
   { obj: "a{", line: 5, col: 12 },
 ];
 
+/**
+ * ⚠️ 解法是**三键**:`d` + 操作对象。
+ *
+ * 不能只收 `["i","w"]` 那种两键 —— 裸 `i` 在可视模式下是
+ * "Inside textobject" 前缀(实测),在 Normal 里则是插入命令。
+ * 少了 `d` 会让用户以为 `iw` 本身就是个能按的东西。
+ *
+ * 操作符 `d` / `c` / `y` / `v` 四个都算对:
+ * 它们对**选中范围**的影响完全一样(都是作用于范围),
+ * 这一页练的是「选中哪一块」,不是「用哪个操作符」。
+ */
+const OPERATORS = ["d", "c", "y", "v"];
+
+const TASKS: DrillTask[] = QUESTIONS.map((q, i) => ({
+  id: `${q.obj}@${q.line}:${q.col}#${i}`,
+  short: `${q.obj}`,
+  desc: SPEC.find((s) => s.key === q.obj)?.desc ?? q.obj,
+  accept: OPERATORS.map((op) => [op, ...q.obj.split("")]),
+}));
+const Q_OF = new Map<string, Q>(QUESTIONS.map((q, i) => [`${q.obj}@${q.line}:${q.col}#${i}`, q]));
+
 export default function TextObjDrill() {
-  const [qi, setQi] = useState(0);
-  const [log, setLog] = useState<string[]>([]);
-  const [solved, setSolved] = useState<number[]>([]);
-  const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const buf = useRef<string[]>([]);
+  const d = useDrill<null>({
+    boardId: "text",
+    tasks: TASKS,
+    init: () => null,
+    // 这一页没有可变状态 —— 练的是「选中哪一块」,选完就翻页。
+    // apply 永不失败:题目区已经把范围高亮出来了,判据是键本身。
+    apply: (_seq, s) => s,
+    toPanelKey: defaultToPanelKey,
+    advanceMs: 1600,
+  });
 
-  const q = QUESTIONS[qi];
+  const q = Q_OF.get(d.task.id)!;
   const spec = findSpec(q.obj)!;
-
-  const reset = useCallback(() => {
-    setLog([]);
-    setFlash(null);
-    buf.current = [];
-  }, []);
-
-  useEffect(() => {
-    reset();
-  }, [qi, reset]);
-
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
-  const settle = useCallback(
-    (typed: string[], op: Operator) => {
-      setLog((l) => [...l, op + typed]);
-      setFlash({ ok: true, text: `✓ ${op}${typed}` });
-      setSolved((x) => (x.includes(qi) ? x : [...x, qi]));
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setQi((i) => (i + 1) % QUESTIONS.length), 1600);
-    },
-    [qi],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(e.key)) return;
-
-      const k = e.key;
-
-      // 第一键是操作符 d/c/y/v
-      if (!buf.current.length) {
-        if (!OPERATORS.some((o) => o.key === k)) return;
-        e.preventDefault();
-        buf.current = [k];
-        return;
-      }
-
-      // 第二键:剩下的 textobject 部分(比如 iw 的先按 i)
-      const op = buf.current[0] as Operator;
-      const partial = q.obj.startsWith(k);
-      if (partial) {
-        e.preventDefault();
-        buf.current = [...buf.current, k];
-        return;
-      }
-      // 不匹配 —— 放行
-      buf.current = [];
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, [q.obj]);
-
-  const typed = buf.current.join("");
   const range: Range | null = locate(SRC, spec.kind, spec.edge, q.line, q.col);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        {QUESTIONS.map((x, i) => (
-          <button
-            key={x.obj + i}
-            onClick={() => setQi(i)}
-            className={`rounded border px-2 py-0.5 text-xs ${
-              i === qi
-                ? "border-blue-400 bg-blue-400 text-black"
-                : solved.includes(i)
-                  ? "border-green-800 text-green-500"
-                  : "border-neutral-700 text-neutral-400 hover:bg-neutral-800"
-            }`}
-          >
-            {solved.includes(i) && i !== qi ? "✓ " : ""}
-            d{x.obj}
-          </button>
-        ))}
-        <button onClick={reset} className="ml-auto rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800">
-          重来
-        </button>
-      </div>
+      <TaskBar
+        tasks={TASKS}
+        current={d.taskIndex}
+        solved={d.solved}
+        onPick={d.setTaskIndex}
+        onReset={d.reset}
+      />
 
-      {/* 题目:高亮范围 */}
-      <div className="rounded border border-neutral-800 bg-neutral-900/40 p-3 text-xs">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-neutral-300">光标在第 {q.line} 行第 {q.col} 列,按</span>
+      {/* 题目:范围已经高亮出来,练的是「按哪几个键能选中它」 */}
+      <TaskBox>
+        <div className="flex flex-wrap items-baseline gap-2 text-neutral-300">
+          <span>光标在第 {q.line} 行第 {q.col} 列,按</span>
           <kbd className="rounded bg-blue-950 px-1.5 py-0.5 text-blue-200">d</kbd>
+          <span>加</span>
           <kbd className="rounded bg-blue-950 px-1.5 py-0.5 text-blue-200">{q.obj}</kbd>
-          <span className="text-neutral-400">会选中哪一块?</span>
+          <span>会选中下面高亮的那一块</span>
         </div>
         <div className="mt-1 text-neutral-500">{spec.desc}</div>
-        {typed && (
-          <div className="mt-1 text-[11px] text-amber-300">
-            已按 {typed} / {q.obj}
-          </div>
-        )}
-      </div>
+        <AcceptList task={d.task} />
+        <PendingHint pending={d.pending} />
+      </TaskBox>
 
       <CodeView line={q.line} col={q.col} range={range} />
 
-      <div className="flex min-h-5 flex-wrap items-center gap-1 text-[11px]">
-        {log.length === 0 ? (
-          <span className="text-neutral-700">按 d(删) 或 c(改) 或 y(拷) 或 v(选),再按 {q.obj}</span>
-        ) : (
-          log.map((x, i) => (
-            <span key={i} data-keylog={i} className="rounded bg-neutral-800 px-1 text-blue-300">{x}</span>
-          ))
-        )}
-      </div>
-      {flash && (
-        <div data-flash={flash.ok ? "ok" : "bad"} className={`text-xs ${flash.ok ? "text-green-400" : "text-red-400"}`}>
-          {flash.text}
-        </div>
-      )}
+      <KeyLog log={d.log} hint="按 d(删) c(改) y(拷) v(选),再按对象那几个键" />
+      <FlashLine flash={d.flash} />
 
-      {/* inner / around 对照 —— 这一族唯一需要背的东西 */}
+      {/* inner / around 对照 */}
       <div className="rounded border border-neutral-800 p-2 text-[11px]">
         <div className="mb-1 text-neutral-600">inner vs around(实测对照,差别就在空白)</div>
         <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
-          {["iw", "i\"", "i'", "i(", "i{", "ip"].map((inner) => {
+          {["iw", 'i"', "i'", "i(", "i{", "ip"].map((inner) => {
             const si = findSpec(inner);
             const sa = findSpec(inner.replace(/^i/, "a"));
             if (!si || !sa) return null;
@@ -207,7 +162,37 @@ export default function TextObjDrill() {
         </div>
       </div>
 
-      {/* 实测记录表 —— 数据来源可查 */}
+      {/* 裸字母对照 —— 原来完全没有的一节 */}
+      <div className="rounded border border-amber-900/50 bg-amber-950/10 p-2 text-[11px]">
+        <div className="mb-1 text-amber-300/90">
+          ⚠️ 同一个字母,加不加 <code className="text-blue-300">i</code>/
+          <code className="text-blue-300">a</code> 前缀是两回事
+        </div>
+        <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+          {BARE_LETTERS.map((b) => (
+            <div key={b.bare} className="flex gap-1.5 text-neutral-400">
+              <code className="w-6 shrink-0 text-amber-300">{b.bare}</code>
+              <span className="w-32 shrink-0 truncate text-neutral-500">{b.bareMeans}</span>
+              {b.inner && (
+                <>
+                  <code className="w-8 shrink-0 text-blue-400/80">{b.inner}</code>
+                  <code className="w-8 shrink-0 text-blue-400/80">{b.around}</code>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-1.5 border-t border-amber-900/40 pt-1.5 text-neutral-500">
+          实测(可视模式下 <code>v</code>+键+<code>&lt;Esc&gt;</code>,读两端):
+          <code>va</code> 和 <code>vi</code> <b>光标不动</b> —— 它们不是 motion,
+          是「等下一个键」的前缀(<code>nvim_get_keymap("v")</code> 里 desc 分别是
+          <i>Around textobject</i> / <i>Inside textobject</i>,rhs 为 nil)。
+          而 <code>vl</code> 会选中往右一格(<code>lo</code>)——
+          字母一样,但 <code>il</code>/<code>al</code> 选的是整行。
+        </div>
+      </div>
+
+      {/* 实测记录表 */}
       <div className="rounded border border-neutral-800 p-2 text-[11px]">
         <div className="mb-1 text-neutral-600">实测记录(跑 d + 这个键之后,那一行变成什么)</div>
         <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
@@ -220,14 +205,14 @@ export default function TextObjDrill() {
         </div>
       </div>
 
-      <div className="text-[10px] leading-relaxed text-neutral-700">
+      <Provenance>
         这些键在 <code>nvim_get_keymap</code> 里<b>查不到</b> —— 它们是 Vim 内建命令,
         没有 <code>desc</code>,会被 dump 脚本「跳过无描述」的规则滤掉。
         范围是<b>破坏性实测</b>出来的:造已知内容 → 落到指定位置 →
         <code>:normal! d(键)</code> → diff 结果。<code>|</code> 标的是原来光标所在列。
         <code>para</code> / <code>indent</code> / <code>line</code> 这几个依赖 Vim 内部的
         段落与缩进规则,<b>不硬算</b> —— 算错了比不算更糟,只列实测结果。
-      </div>
+      </Provenance>
     </div>
   );
 }
@@ -238,7 +223,9 @@ function CodeView({ line, col, range }: { line: number; col: number; range: Rang
     <div className="rounded bg-neutral-950 p-3">
       <div className="mb-1.5 text-[10px] text-neutral-700">
         高亮 = 按这个键会选中的范围
-        {range ? ` · 第 ${range.l1}-${range.l2} 行 第 ${range.c1}-${range.c2} 列` : " · 这个键的范围没建模"}
+        {range
+          ? ` · 第 ${range.l1}-${range.l2} 行 第 ${range.c1}-${range.c2} 列`
+          : " · 这个键的范围没建模"}
       </div>
       <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
         {SRC.map((text, i) => {

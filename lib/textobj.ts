@@ -103,10 +103,14 @@ export const SPEC: ObjSpec[] = [
     measured: { doc: SRC, line: 2, col: 15, result: 'local name = "|"' } },
   { id: "a\"", key: "a\"", kind: "quote", edge: "around", desc: "双引号本身 + 内容",
     measured: { doc: SRC, line: 2, col: 15, result: "local name =|" } },
+  // ⚠️ 重测过。之前记的 col=17 是**错的** —— 那一列在引号**外面**
+  // (第 5 行 `  return { key = 'val' }` 的 17 列是 `=`,18 列才是开引号),
+  // 删出来的 `key = '| ' }` 引号没闭合,一眼假。
+  // 正确的列是 19(词首 `v`),实测 di' → `''`(内容没了,引号留着)。
   { id: "i'", key: "i'", kind: "quote", edge: "inner", desc: "单引号里的内容",
-    measured: { doc: SRC, line: 5, col: 17, result: "  return { key = '| ' }" } },
+    measured: { doc: SRC, line: 5, col: 19, result: "  return { key = '|' }" } },
   { id: "a'", key: "a'", kind: "quote", edge: "around", desc: "单引号本身 + 内容",
-    measured: { doc: SRC, line: 5, col: 17, result: "  return { key = |}" } },
+    measured: { doc: SRC, line: 5, col: 19, result: "  return { key = |}" } },
 
   { id: "i(", key: "i(", kind: "paren", edge: "inner", desc: "圆括号里的内容",
     measured: { doc: SRC, line: 1, col: 21, result: "local total = compute(|) + 1" } },
@@ -165,6 +169,62 @@ export const INNER_AROUND_PAIRS: [string, string][] = [
   ["i{", "a{"],
   ["ip", "ap"],
   ["il", "al"],
+];
+
+/**
+ * 裸字母对照 —— **这一族最容易混的地方**,而原来的页面完全没有。
+ *
+ * ## 实测依据
+ *
+ * 可视模式下(`v` + 键 + `<Esc>`,读 `'<` / `'>` 两端):
+ *
+ * | 键 | 实测结果 |
+ * |----|----------|
+ * | `va` | ★光标没动 |
+ * | `vi` | ★光标没动 |
+ * | `vaw` | `local ` |
+ * | `viw` | `local` |
+ * | `vs` | ★光标没动 |
+ * | `vp` | ★光标没动 |
+ * | `vl` | `lo`(右移一格) |
+ *
+ * ## 两件事,都很反直觉
+ *
+ * **1. `a` 和 `i` 是前缀,不是对象。**
+ * `nvim_get_keymap("v")` 实测:`a` → nil,desc = **"Around textobject"**;
+ * `i` → nil,desc = **"Inside textobject"**。rhs 为 nil 表示不是映射,
+ * 是 Vim 内建的「等下一个键」状态。所以 `va` 单独按**光标不动**,
+ * 不是「选一个字符」—— 它在等你按下一个键。
+ *
+ * ⚠️ 我第一轮探针按下 `<Esc>` 太早,读出来是「选中 1 个字符」,
+ * 差点照着错的结论写页面。第二轮读出「光标没动」才对。
+ * 探针本身没验证过 → 结论不成立,这个坑这轮踩了第三次。
+ *
+ * **2. 同一个字母,加不加前缀是两回事。**
+ *
+ * | 裸键 | 含义 | 加 `i` | 加 `a` |
+ * |------|------|--------|--------|
+ * | `l` | 右移一格 | `il` 整行内 | `al` 整行+空行 |
+ * | `w` | 下一个词首 | `iw` 词 | `aw` 词+空白 |
+ * | `"` | ★不是 motion | `i"` 引号内 | `a"` 连引号 |
+ *
+ * `vl` 选的是「往右一格」,`vil` 选的是「整行」。字母一样,对象不同。
+ */
+export const BARE_LETTERS: {
+  /** 裸键 */  bare: string;
+  /** 裸键实测是什么 */ bareMeans: string;
+  /** 加 i 后的键 */ inner: string | null;
+  /** 加 a 后的键 */ around: string | null;
+  /** 裸键是不是真的 motion */ isMotion: boolean;
+}[] = [
+  { bare: "a", bareMeans: "不是对象,是 Around 的前缀", inner: null, around: null, isMotion: false },
+  { bare: "i", bareMeans: "不是对象,是 Inside 的前缀", inner: null, around: null, isMotion: false },
+  { bare: "l", bareMeans: "往右一格", inner: "il", around: "al", isMotion: true },
+  { bare: "w", bareMeans: "跳到下一个词首", inner: "iw", around: "aw", isMotion: true },
+  { bare: '"', bareMeans: "不是 motion", inner: 'i"', around: 'a"', isMotion: false },
+  { bare: "(", bareMeans: "跳到配对的括号", inner: "i(", around: "a(", isMotion: true },
+  { bare: "s", bareMeans: "不是 motion(Normal 里是 substitute)", inner: "is", around: null, isMotion: false },
+  { bare: "p", bareMeans: "不是 motion", inner: "ip", around: "ap", isMotion: false },
 ];
 
 /**
