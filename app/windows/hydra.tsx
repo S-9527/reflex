@@ -53,11 +53,24 @@ import { FlashLine, KeyLog, PendingHint, Provenance, TaskBar, TaskBox } from "@/
 
 type View = { layout: Layout; focus: number };
 
+const LEADER = "<Space>";
+const HYDRA = "w";
+
+/**
+ * ⚠️ 解法是**完整三键** `<Space>wX`,不是裸面板键。
+ *
+ * 这一页的练习目标就是「进 hydra 面板 → 按面板键」。
+ * 如果 accept 写成 `[["v"]]`,那裸 `v` 也会被判对 ——
+ * 而真 nvim 里裸 `v` 是字符级可视模式,和 hydra 里的 `v`(竖着切一刀)
+ * 完全是两回事。那就是**训练器比真实环境宽松**,练出来的反射用不上。
+ *
+ * 这类「善意地多收几个键」比 bug 更危险:通过率好看,练的东西是废的。
+ */
 const DRILL_TASKS: DrillTask[] = TASKS.map((t, i) => ({
   id: `${t.key}#${i}`,
   short: t.key,
   desc: t.desc,
-  accept: [[t.key]],
+  accept: [[LEADER, HYDRA, t.key]],
 }));
 /** DrillTask.id → 原题 */
 const TASK_OF = new Map<string, Task>(TASKS.map((t, i) => [`${t.key}#${i}`, t]));
@@ -175,19 +188,17 @@ function applyKey(key: string, cur: View, zoomedRef: { current: View | null }): 
   }
 }
 
-/** 面板里所有键(除了本题的),作为 extraAccept */
-const PANEL = WIN_KEYS.filter((k) => !k.skip).map((k) => [k.key]);
+/** 面板里所有键(除了本题的),作为 extraAccept —— 同样是完整三键 */
+const PANEL = WIN_KEYS.filter((k) => !k.skip).map((k) => [LEADER, HYDRA, k.key]);
 
 /**
- * 这一页只收 `<Space>` + 一个面板键。
+ * 这一页只收 `<Space>` + `w` + 一个面板键。
  *
- * ⚠️ 面板键是**单个可打印字符**(`v` `s` `>` `|` …),没有多键序列,
- * 所以直接返回 e.key。带 Ctrl 的一律放行 —— 这一页不劫持
- * Ctrl+W / Ctrl+R 那些浏览器快捷键。
+ * 带 Ctrl 的一律放行 —— 这一页不劫持 Ctrl+W / Ctrl+R 那些浏览器快捷键。
  */
 function toPanelKey(e: KeyboardEvent): string | null {
   if (e.ctrlKey) return null;
-  return e.key === " " ? "<Space>" : e.key;
+  return e.key === " " ? LEADER : e.key;
 }
 
 export default function HydraDrill() {
@@ -198,7 +209,7 @@ export default function HydraDrill() {
 
   const apply = useCallback(
     (seq: string[], s: View, t: DrillTask) => {
-      // 命中的就是 accept[0] 里那一个面板键 —— 这一页每题只有一条解法
+      // 命中的就是完整三键的最后一位 —— 这一页每题只有一条解法
       const key = seq[seq.length - 1];
       if (key !== TASK_OF.get(t.id)!.key) return NO_EFFECT;
       // applyKey 返回 null = 当前布局下这个键无效(焦点已在最左之类)
@@ -215,6 +226,7 @@ export default function HydraDrill() {
   const onOther = useCallback((seq: string[], s: View, t: DrillTask) => {
     const key = seq[seq.length - 1];
     const w = findKey(key);
+    // 面板外的键不该走到这里 —— 引擎只在 extraAccept 命中时才调 onOther
     if (!w) return { text: `✗ ${key} 不在这一页的范围里` };
     if (!w.modeled) return { text: `${key}(${w.desc})—— 这一页还没建模它的效果` };
     const next = applyKey(key, s, zoomedRef);
