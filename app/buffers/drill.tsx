@@ -12,7 +12,7 @@ import {
   type BufTask,
 } from "@/lib/bufs";
 import type { DrillTask } from "@/lib/drill";
-import { defaultToPanelKey, useDrill } from "@/lib/use-drill";
+import { defaultToPanelKey, NO_EFFECT, useDrill } from "@/lib/use-drill";
 import {
   AcceptList,
   FlashLine,
@@ -76,7 +76,9 @@ export default function BufferDrillInner() {
   const apply = useCallback((_seq: string[], s: BufState, t: DrillTask) => {
     // ⚠️ apply 收的是**命中的那条解法**,但操作由 SOLUTIONS 的主键决定 ——
     //   同一组的四条解法(L / ]b / <Space>bb / <Space>b`)底层是同一条命令。
-    return applyBufKey(TASK_OF.get(t.id)!.key, s);
+    // applyBufKey 返回 null = 这一族模型不了(比如按键弹 UI),
+    // 翻译成 NO_EFFECT 交给引擎提示。
+    return applyBufKey(TASK_OF.get(t.id)!.key, s) ?? NO_EFFECT;
   }, []);
 
   const d = useDrill<BufState>({

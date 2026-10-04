@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import {
   FILE_KEYS,
   FILE_TASKS,
@@ -8,10 +8,20 @@ import {
   VERB_NAMES,
   SCOPE_NAMES,
   findFileKey,
-  normSeq,
-  toPanelKey,
-  type FileTask,
+  type FileKey,
 } from "@/lib/files";
+import type { DrillTask } from "@/lib/drill";
+import { defaultToPanelKey, useDrill } from "@/lib/use-drill";
+import {
+  AcceptList,
+  FlashLine,
+  KeyLog,
+  NativeRef,
+  PendingHint,
+  Provenance,
+  TaskBar,
+  TaskBox,
+} from "@/lib/drill-ui";
 
 /**
  * 文件浏览器练习 —— 练的是**一条规律**,不是十几个键。
@@ -34,113 +44,67 @@ import {
  *
  * headless 下弹窗建不起来(没 UI),所以**浮动窗本身我没验证过**,
  * 只验证了键位映射确实存在且 desc 如表。界面上如实标注了。
+ *
+ * ## ⚠️ <C-/> 的特殊处理
+ *
+ * `<Space>ft` 有个同义键 `<C-/>`(root 侧是终端)。但它带 Ctrl,
+ * 而引擎的 toPanelKey 收不了 Ctrl —— 所以这里单独把 Ctrl+`/` 翻译成
+ * `<C-/>`,其余带 Ctrl 的键照旧返回 null 放行(不劫持 Ctrl+R / F12)。
  */
+const TASKS: DrillTask[] = FILE_TASKS.map((t, i) => ({
+  id: `${t.key}#${i}`,
+  short: t.key,
+  desc: "",
+  accept: findFileKey(t.key)?.seqs ?? [],
+}));
+const KEY_OF = new Map<string, FileKey | undefined>(
+  FILE_TASKS.map((t, i) => [`${t.key}#${i}`, findFileKey(t.key)]),
+);
+
+/** 按钮上把 <Space> 缩成 S,一格显示得下 */
+const label = (t: DrillTask) => t.short.replace("<Space>", "S");
+
+/** ⚠️ <C-/> 是这一族唯一的 Ctrl 系解法,必须单独放行 */
+function toPanelKey(e: KeyboardEvent): string | null {
+  // Vim 记法 <C-/> 的浏览器 event.key 是 "/" 且 ctrlKey 为真。
+  // 不在这里拦,它会被 defaultToPanelKey 之后的「其余 Ctrl 放行」挡掉。
+  if (e.ctrlKey && e.key === "/") return "<C-/>";
+  if (e.ctrlKey) return null;
+  return defaultToPanelKey(e);
+}
+
 export default function FileDrill() {
-  const [ti, setTi] = useState(0);
-  const [log, setLog] = useState<string[]>([]);
-  const [solved, setSolved] = useState<number[]>([]);
-  const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const seq = useRef<string | null>(null);
+  /**
+   * 这一族 apply 永远是「状态不变」—— 弹窗没有可持久渲染的状态,
+   * 所以状态本身是 null。
+   *
+   * ⚠️ 所以这里**不能**用 `return null` 表示失败:引擎分不清
+   * 「失败」和「状态就是 null」,会把按对的键误报成
+   * 「按了但状态没变」。返回 NO_EFFECT 才是失败,而这一族永不失败。
+   */
+  const apply = useCallback((_seq: string[], s: null) => s, []);
 
-  const task = FILE_TASKS[ti];
-  const target = findFileKey(task.key)!;
-  const accept = target.seqs;
+  const d = useDrill<null>({
+    boardId: "files",
+    tasks: TASKS,
+    init: () => null,
+    apply,
+    toPanelKey,
+    advanceMs: 1500,
+  });
 
-  const reset = useCallback(() => {
-    setLog([]);
-    setFlash(null);
-    setPending(null);
-    seq.current = null;
-  }, []);
-
-  useEffect(() => {
-    reset();
-  }, [ti, reset]);
-
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
-  const settle = useCallback(
-    (matched: string[]) => {
-      const shown = matched.join("");
-      setLog((l) => [...l, shown]);
-      setFlash({ ok: true, text: `✓ ${shown}` });
-      setSolved((x) => (x.includes(ti) ? x : [...x, ti]));
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setTi((i) => (i + 1) % FILE_TASKS.length), 1500);
-    },
-    [ti],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.altKey) return;
-      if (["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(e.key)) return;
-
-      // <C-/> 是终端(root)的同义键 —— 必须单独放行,
-      // 否则它会被下面的 "Ctrl 一律忽略" 挡掉。
-      // ⚠️ Vim 记法 <C-/> 的浏览器 event.key 是 "/" 且 ctrlKey 为真。
-      if (e.ctrlKey && e.key === "/") {
-        e.preventDefault();
-        seq.current = "";
-        setPending(null);
-        if (accept.some((s) => normSeq(s) === "<C-/>")) settle(["<C-/>"]);
-        return;
-      }
-      if (e.ctrlKey) return;
-
-      const k = toPanelKey(e.key);
-      const buf = seq.current ? [...seq.current.split("|"), k] : [k];
-
-      if (accept.some((s) => normSeq(s) === normSeq(buf))) {
-        e.preventDefault();
-        seq.current = "";
-        setPending(null);
-        settle(buf);
-        return;
-      }
-
-      const partial = accept.find((s) => {
-        if (s.length <= buf.length) return false;
-        return s.slice(0, buf.length).every((x, i) => x === buf[i]);
-      });
-      if (partial) {
-        e.preventDefault();
-        seq.current = normSeq(buf);
-        setPending(buf.join(" "));
-        return;
-      }
-      seq.current = "";
-      setPending(null);
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, [accept, settle]);
+  const target = KEY_OF.get(d.task.id)!;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        {FILE_TASKS.map((t, i) => (
-          <button
-            key={t.key}
-            onClick={() => setTi(i)}
-            className={`rounded border px-2 py-0.5 text-xs ${
-              i === ti
-                ? "border-blue-400 bg-blue-400 text-black"
-                : solved.includes(i)
-                  ? "border-green-800 text-green-500"
-                  : "border-neutral-700 text-neutral-400 hover:bg-neutral-800"
-            }`}
-          >
-            {solved.includes(i) && i !== ti ? "✓ " : ""}
-            {t.key.replace("<Space>", "S")}
-          </button>
-        ))}
-        <button onClick={reset} className="ml-auto rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800">
-          重来
-        </button>
-      </div>
+      <TaskBar
+        tasks={TASKS}
+        current={d.taskIndex}
+        solved={d.solved}
+        onPick={d.setTaskIndex}
+        onReset={d.reset}
+        labelOf={label}
+      />
 
       {/* 规律提示 —— 这页的主角 */}
       <div className="rounded border border-blue-900/60 bg-blue-950/20 p-3 text-xs">
@@ -148,7 +112,11 @@ export default function FileDrill() {
           规律:<b>小写 = 项目根目录</b>,<b>大写 = 当前目录</b>
         </div>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-neutral-400">
-          {VERBS.filter((v) => FILE_KEYS.some((k) => k.verb === v && k.scope === "root") && FILE_KEYS.some((k) => k.verb === v && k.scope === "cwd")).map((v) => {
+          {VERBS.filter(
+            (v) =>
+              FILE_KEYS.some((k) => k.verb === v && k.scope === "root") &&
+              FILE_KEYS.some((k) => k.verb === v && k.scope === "cwd"),
+          ).map((v) => {
             const root = FILE_KEYS.find((k) => k.verb === v && k.scope === "root")!;
             const cwd = FILE_KEYS.find((k) => k.verb === v && k.scope === "cwd")!;
             return (
@@ -164,45 +132,17 @@ export default function FileDrill() {
       </div>
 
       {/* 题目 */}
-      <div className="rounded border border-neutral-800 bg-neutral-900/40 p-3 text-xs">
+      <TaskBox>
         <div className="text-neutral-300">
           {VERB_NAMES[target.verb]} · 要开<b>{target.scope ? SCOPE_NAMES[target.scope] : "不分目录的"}</b>那个
         </div>
-        <div className="mt-1.5 space-y-1">
-          {accept.map((s, i) => (
-            <div key={i} className="flex items-baseline gap-2">
-              <span className="w-8 shrink-0 text-[10px] text-neutral-700">{i === 0 ? "键位" : "或"}</span>
-              {s.map((x, j) => (
-                <kbd key={j} className="rounded bg-blue-950 px-1.5 py-0.5 text-blue-200">{x}</kbd>
-              ))}
-            </div>
-          ))}
-        </div>
-        {target.native && (
-          <div className="mt-1.5 flex items-baseline gap-2 text-[11px]">
-            <span className="w-8 shrink-0 text-neutral-700">原生</span>
-            <code className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">{target.native}</code>
-            <span className="text-neutral-700">Ex 命令,实测过</span>
-          </div>
-        )}
-        <div className="mt-1 text-[11px] text-neutral-500">{target.desc}</div>
-        {pending && <div className="mt-1 text-[11px] text-amber-300">等下一个键… {pending}</div>}
-      </div>
+        <AcceptList task={d.task} />
+        <NativeRef native={target.native} note={target.desc} noteClass="text-neutral-500" />
+        <PendingHint pending={d.pending} />
+      </TaskBox>
 
-      <div className="flex min-h-5 flex-wrap items-center gap-1 text-[11px]">
-        {log.length === 0 ? (
-          <span className="text-neutral-700">按上面任意一条解法</span>
-        ) : (
-          log.map((x, i) => (
-            <span key={i} data-keylog={i} className="rounded bg-neutral-800 px-1 text-blue-300">{x}</span>
-          ))
-        )}
-      </div>
-      {flash && (
-        <div data-flash={flash.ok ? "ok" : "bad"} className={`text-xs ${flash.ok ? "text-green-400" : "text-red-400"}`}>
-          {flash.text}
-        </div>
-      )}
+      <KeyLog log={d.log} hint="按上面任意一条解法" />
+      <FlashLine flash={d.flash} />
 
       {/* 全部键位 */}
       <div className="rounded border border-neutral-800 p-2 text-[11px]">
@@ -224,13 +164,13 @@ export default function FileDrill() {
         </div>
       </div>
 
-      <div className="text-[10px] leading-relaxed text-neutral-700">
+      <Provenance>
         键位实测自 <code>nvim_get_keymap("n")</code>。<b>浮动窗本身没验证过</b> ——
         headless 下 Snacks 弹不出窗,我只能确认键位存在且 desc 如表。
         原生 Ex 逐条 feedkeys 验过;<code>:Ex</code> <code>:tn</code> <code>:tl</code>{" "}
         <code>:files</code> 这些<b>缩写在你机器上不生效</b>(缺 <code>~/.vim/abbr/</code>,
         要 <code>:mkexrc</code> 生成),所以 native 列只给完整写法。
-      </div>
+      </Provenance>
     </div>
   );
 }

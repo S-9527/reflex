@@ -30,6 +30,19 @@ import { classify, mergeFirstKeys, shouldTake, type DrillTask } from "@/lib/dril
 
 export type Flash = { ok: boolean; text: string };
 
+/**
+ * 「按了但状态没变」的哨兵。
+ *
+ * ⚠️ 不要用 `S | null` 当返回值 —— `/files` 的状态本身**就是** `null`
+ * (那一族弹的是浮动窗,没有可持久渲染的状态)。用 `null` 当失败信号,
+ * 引擎分不清「失败」和「状态就是 null」,于是每次都误报
+ * 「按了但状态没变」。实测踩到:`<Space>ft` 按对了却显示失败。
+ *
+ * 所以失败用一个**独立符号**表示,不可能和任何状态值混淆。
+ */
+export const NO_EFFECT = Symbol("drill.noEffect");
+export type NoEffect = typeof NO_EFFECT;
+
 export type UseDrillOpts<S> = {
   /** 板块 id,进度存储用 */
   boardId: string;
@@ -40,10 +53,11 @@ export type UseDrillOpts<S> = {
   /**
    * 执行一条完整解法。
    *
-   * ⚠️ 返回 `null` 的语义是「按了但状态没变」(起始状态已满足条件),
-   * 引擎会**明确提示**,不会静默吞掉 —— 静默无反应最难查。
+   * ⚠️ 返回 {@link NO_EFFECT} 的语义是「按了但状态没变」
+   * (起始状态已满足条件),引擎会**明确提示**,不会静默吞掉 ——
+   * 静默无反应最难查。返回新状态就是成功。
    */
-  apply: (seq: string[], s: S, task: DrillTask) => S | null;
+  apply: (seq: string[], s: S, task: DrillTask) => S | NoEffect;
   /** 浏览器 KeyboardEvent → 面板记法。返回 null = 这一键不归我管 */
   toPanelKey: (e: KeyboardEvent) => string | null;
   /**
@@ -205,7 +219,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
 
       const cur = taskRef.current;
       const out = apply(r.seq, stateRef.current, cur);
-      if (out === null) {
+      if (out === NO_EFFECT) {
         setFlash({
           ok: false,
           text: noEffectText

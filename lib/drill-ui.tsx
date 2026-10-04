@@ -121,8 +121,8 @@ export function PendingHint({ pending }: { pending: string | null }) {
   );
 }
 
-/** 已按下的键 */
-export function KeyLog({ log, hint }: { log: string[]; hint?: string }) {
+/** 已按下的键。hint 允许 JSX —— 有的板块要显示 <kbd> */
+export function KeyLog({ log, hint }: { log: string[]; hint?: React.ReactNode }) {
   return (
     <div className="flex min-h-5 flex-wrap items-center gap-1 text-[11px]">
       {log.length === 0 ? (

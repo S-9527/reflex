@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import {
   initial,
   split,
@@ -15,14 +15,16 @@ import {
   zoomIn,
   cycleFocus,
   focusIndex,
-  countWindows,
   positions,
   run,
   RESIZE_STEP,
   type Layout,
   type Op,
 } from "@/lib/split";
-import { WIN_KEYS, findKey, GROUPS, parseSeq, TASKS, type ParseResult, type Task } from "@/lib/winkeys";
+import { WIN_KEYS, findKey, GROUPS, TASKS, type Task } from "@/lib/winkeys";
+import type { DrillTask } from "@/lib/drill";
+import { NO_EFFECT, useDrill } from "@/lib/use-drill";
+import { FlashLine, KeyLog, PendingHint, Provenance, TaskBar, TaskBox } from "@/lib/drill-ui";
 
 /**
  * 窗口键位训练 —— 只练 LazyVim 的 `<Space>wX`,原生写法只作对照展示。
@@ -34,222 +36,228 @@ import { WIN_KEYS, findKey, GROUPS, parseSeq, TASKS, type ParseResult, type Task
  * 那套键才是他平时真按的,原生写法在键表里看着当参照就够了。
  *
  * 好处不只是少练一半:序列长度统一成 3 键,
- * 少一条前缀分支就少一类 bug(见 parseSeq 里记的那个三键失效的坑)。
+ * 少一条前缀分支就少一类 bug。
  *
  * ## 判分要求按出效果
  *
  * 单键反射 + 必须真的改变布局 —— 光按对键但布局没变
- * (比如没有窗口可关)不算过。
+ * (比如没有窗口可关)不算过,并且**明确提示**,不静默吞掉。
+ *
+ * ## extraAccept:这一页和其它四页不一样
+ *
+ * 面板里有 20 个键,每道题只对其中一个。按了别的键时不能放行
+ * (那会掉进浏览器,用户看不到任何反馈),也不能判对 ——
+ * 要明确说「那是另一个命令」并**演示它的效果**,让人看见差别。
+ * 这就是引擎 `extraAccept` + `onOther` 的用武之地。
  */
 
 type View = { layout: Layout; focus: number };
 
-// 题库在 lib/winkeys.ts —— 放在 lib 是为了让单测能守住
-// 「每道题都可解」这条不变量(见 winkeys.test.ts)。
+const DRILL_TASKS: DrillTask[] = TASKS.map((t, i) => ({
+  id: `${t.key}#${i}`,
+  short: t.key,
+  desc: t.desc,
+  accept: [[t.key]],
+}));
+/** DrillTask.id → 原题 */
+const TASK_OF = new Map<string, Task>(TASKS.map((t, i) => [`${t.key}#${i}`, t]));
 
-/** 一次按键的解析结果 */
-type Parsed = ParseResult;
-
-export default function HydraDrill() {
-  const [ti, setTi] = useState(0);
-  const [v, setV] = useState<View>({ layout: initial(), focus: 1 });
-  const [log, setLog] = useState<string[]>([]);
-  const [solved, setSolved] = useState<number[]>([]);
-  const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
-  /** 已按下但还没完成的前缀,如 "<Space>" / "<Space>w" */
-  const [pending, setPending] = useState<string | null>(null);
-  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** <Space>w 序列缓冲 */
-  const seq = useRef<string[]>([]);
-
-  const task = TASKS[ti];
-  const wk = findKey(task.key);
-
-  /**
+/**
  * 从 task.start 重放出起始布局。
  *
  * ⚠️ 直接复用 lib/split 的 run(),不要在这里手写执行器。
-   * 原来这里自己写了一遍只认 `dir` 和 `go` 的循环,于是给 `=` 题
-   * 加上 `{resize:"v+"}` 之后它**静默跳过**了这一步 ——
-   * 起始布局还是对半的,`=` 又变成无解题。
-   *
-   * 同概念两套实现,必然不同步 —— 这个坑这轮已经踩了三次
-   * (leader 判据 / parseSeq / buildStart)。
+ * 原来这里自己写了一遍只认 `dir` 和 `go` 的循环,于是给 `=` 题
+ * 加上 `{resize:"v+"}` 之后它**静默跳过**了这一步 ——
+ * 起始布局还是对半的,`=` 又变成无解题。
+ *
+ * 同概念两套实现,必然不同步 —— 这个坑这轮已经踩了三次
+ * (leader 判据 / parseSeq / buildStart)。
  */
-  const buildStart = useCallback((t: Task): View => run(t.start), []);
+const buildStart = (t: Task): View => run(t.start);
 
-  const reset = useCallback(() => {
-    setV(buildStart(task));
-    setLog([]);
-    setFlash(null);
-    setPending(null);
-    seq.current = [];
-    zoomedRef.current = null;
-  }, [buildStart, task]);
+/** 执行一个面板键的效果 */
+function applyKey(key: string, cur: View, zoomedRef: { current: View | null }): View | null {
+  switch (key) {
+    case "v": {
+      const l = split(cur.layout, cur.focus, "v");
+      return l ? { layout: l, focus: l.nextId - 1 } : null;
+    }
+    case "s": {
+      const l = split(cur.layout, cur.focus, "h");
+      return l ? { layout: l, focus: l.nextId - 1 } : null;
+    }
+    case "h":
+    case "j":
+    case "k":
+    case "l": {
+      const n = moveFocus(cur.layout, cur.focus, key);
+      return n === null ? null : { layout: cur.layout, focus: n };
+    }
+    case "H":
+    case "J":
+    case "K":
+    case "L": {
+      const d = key.toLowerCase() as "h" | "j" | "k" | "l";
+      const l = moveToEdge(cur.layout, cur.focus, d);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "d": {
+      const l = close(cur.layout, cur.focus);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "o": {
+      const l = closeOthers(cur.layout, cur.focus);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "x": {
+      const l = swapNext(cur.layout, cur.focus);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case ">": {
+      const l = resize(cur.layout, cur.focus, "v", RESIZE_STEP);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "<": {
+      const l = resize(cur.layout, cur.focus, "v", -RESIZE_STEP);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "+": {
+      const l = resize(cur.layout, cur.focus, "h", -RESIZE_STEP);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "-": {
+      const l = resize(cur.layout, cur.focus, "h", RESIZE_STEP);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "|": {
+      const l = maxOut(cur.layout, cur.focus, "v");
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "_": {
+      const l = maxOut(cur.layout, cur.focus, "h");
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "=": {
+      const l = equalize(cur.layout, cur.focus);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    case "m": {
+      // 缩放要能"再按一次恢复",所以退出走 zoomedRef —— 只进不出等于半个功能。
+      if (zoomedRef.current) {
+        const prev = zoomedRef.current;
+        zoomedRef.current = null;
+        return prev;
+      }
+      const l = zoomIn(cur.layout, cur.focus);
+      if (!l) return null;
+      zoomedRef.current = cur;
+      return { layout: l, focus: cur.focus };
+    }
+    case "W": {
+      const n = cycleFocus(cur.layout, cur.focus);
+      return n === null ? null : { layout: cur.layout, focus: n };
+    }
+    case "0":
+    case "1": {
+      const n = focusIndex(cur.layout, Number(key));
+      return n === null ? null : { layout: cur.layout, focus: n };
+    }
+    // q 和 T 在「窗口数量」上的效果都是当前窗口离开本标签页,
+    // 所以按 close 建模。差异(q 会跳 Alternate File、T 会开新标签页)
+    // 不在这个模型里,界面上已注明。
+    case "q":
+    case "T": {
+      const l = close(cur.layout, cur.focus);
+      return l ? { layout: l, focus: cur.focus } : null;
+    }
+    default:
+      return null;
+  }
+}
 
-  useEffect(() => {
-    reset();
-  }, [ti, reset]);
+/** 面板里所有键(除了本题的),作为 extraAccept */
+const PANEL = WIN_KEYS.filter((k) => !k.skip).map((k) => [k.key]);
 
-  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
+/**
+ * 这一页只收 `<Space>` + 一个面板键。
+ *
+ * ⚠️ 面板键是**单个可打印字符**(`v` `s` `>` `|` …),没有多键序列,
+ * 所以直接返回 e.key。带 Ctrl 的一律放行 —— 这一页不劫持
+ * Ctrl+W / Ctrl+R 那些浏览器快捷键。
+ */
+function toPanelKey(e: KeyboardEvent): string | null {
+  if (e.ctrlKey) return null;
+  return e.key === " " ? "<Space>" : e.key;
+}
 
-  /** 把一个键接到序列缓冲上 —— 逻辑全在 lib/winkeys 的 parseSeq 里 */
-  const parse = useCallback((k: string): ParseResult => parseSeq(seq.current, k), []);
-
+export default function HydraDrill() {
   /** 缩放前的样子,再按一次 m 用来恢复 */
   const zoomedRef = useRef<View | null>(null);
 
-  /** 执行一个面板键的效果 */
-  const applyKey = useCallback((key: string, cur: View): View | null => {
-    switch (key) {
-      case "v": { const l = split(cur.layout, cur.focus, "v"); return l ? { layout: l, focus: l.nextId - 1 } : null; }
-      case "s": { const l = split(cur.layout, cur.focus, "h"); return l ? { layout: l, focus: l.nextId - 1 } : null; }
-      case "h": case "j": case "k": case "l": {
-        const n = moveFocus(cur.layout, cur.focus, key);
-        return n === null ? null : { layout: cur.layout, focus: n };
-      }
-      case "H": case "J": case "K": case "L": {
-        const d = key.toLowerCase() as "h" | "j" | "k" | "l";
-        const l = moveToEdge(cur.layout, cur.focus, d);
-        return l ? { layout: l, focus: cur.focus } : null;
-      }
-      case "d": { const l = close(cur.layout, cur.focus); return l ? { layout: l, focus: cur.focus } : null; }
-      case "o": { const l = closeOthers(cur.layout, cur.focus); return l ? { layout: l, focus: cur.focus } : null; }
-      case "x": { const l = swapNext(cur.layout, cur.focus); return l ? { layout: l, focus: cur.focus } : null; }
-      case ">": { const l = resize(cur.layout, cur.focus, "v", RESIZE_STEP); return l ? { layout: l, focus: cur.focus } : null; }
-      case "<": { const l = resize(cur.layout, cur.focus, "v", -RESIZE_STEP); return l ? { layout: l, focus: cur.focus } : null; }
-      case "+": { const l = resize(cur.layout, cur.focus, "h", -RESIZE_STEP); return l ? { layout: l, focus: cur.focus } : null; }
-      case "-": { const l = resize(cur.layout, cur.focus, "h", RESIZE_STEP); return l ? { layout: l, focus: cur.focus } : null; }
-      case "|": { const l = maxOut(cur.layout, cur.focus, "v"); return l ? { layout: l, focus: cur.focus } : null; }
-      case "_": { const l = maxOut(cur.layout, cur.focus, "h"); return l ? { layout: l, focus: cur.focus } : null; }
-      case "=": { const l = equalize(cur.layout, cur.focus); return l ? { layout: l, focus: cur.focus } : null; }
-      // ---- 其他组 ----
-      case "m": {
-        // 缩放要能"再按一次恢复",所以退出走 prevRef —— 只进不出等于半个功能。
-        if (zoomedRef.current) {
-          const prev = zoomedRef.current;
-          zoomedRef.current = null;
-          return prev;
-        }
-        const l = zoomIn(cur.layout, cur.focus);
-        if (!l) return null;
-        zoomedRef.current = cur;
-        return { layout: l, focus: cur.focus };
-      }
-      case "W": {
-        const n = cycleFocus(cur.layout, cur.focus);
-        return n === null ? null : { layout: cur.layout, focus: n };
-      }
-      case "0": case "1": {
-        const n = focusIndex(cur.layout, Number(key));
-        return n === null ? null : { layout: cur.layout, focus: n };
-      }
-      // q 和 T 在「窗口数量」上的效果都是当前窗口离开本标签页,
-      // 所以按 close 建模。差异(q 会跳 Alternate File、T 会开新标签页)
-      // 不在这个模型里,界面上已注明。
-      case "q": case "T": {
-        const l = close(cur.layout, cur.focus);
-        return l ? { layout: l, focus: cur.focus } : null;
-      }
-      default: return null;
-    }
+  const init = useCallback((t: DrillTask) => buildStart(TASK_OF.get(t.id)!), []);
+
+  const apply = useCallback(
+    (seq: string[], s: View, t: DrillTask) => {
+      // 命中的就是 accept[0] 里那一个面板键 —— 这一页每题只有一条解法
+      const key = seq[seq.length - 1];
+      if (key !== TASK_OF.get(t.id)!.key) return NO_EFFECT;
+      // applyKey 返回 null = 当前布局下这个键无效(焦点已在最左之类)
+      return applyKey(key, s, zoomedRef) ?? NO_EFFECT;
+    },
+    [],
+  );
+
+  /**
+   * 按了面板里的**其它**键:演示它的效果,并说明本题要的是哪个。
+   *
+   * 关键是必须演示 —— 只说「错了」的话用户永远建立不起两个键的差别。
+   */
+  const onOther = useCallback((seq: string[], s: View, t: DrillTask) => {
+    const key = seq[seq.length - 1];
+    const w = findKey(key);
+    if (!w) return { text: `✗ ${key} 不在这一页的范围里` };
+    if (!w.modeled) return { text: `${key}(${w.desc})—— 这一页还没建模它的效果` };
+    const next = applyKey(key, s, zoomedRef);
+    return {
+      next: next ?? s,
+      text: next
+        ? `✗ ${key} 是「${w.desc}」,本题要的是 ${t.short} —— ${t.desc}`
+        : `${key} 按了但布局没变(当前布局下这个键无效)`,
+    };
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.altKey) return;
+  const d = useDrill<View>({
+    boardId: "windows-hydra",
+    tasks: DRILL_TASKS,
+    init,
+    apply,
+    toPanelKey,
+    extraAccept: PANEL,
+    onOther,
+    // 延迟给够看反馈:判对后立刻翻页重置会让人看不出那下生效没有
+    advanceMs: 1600,
+    noEffectText: (seq) => `${seq.join("")} 按了但布局没变(当前布局下这个键无效)`,
+    onResetExtra: () => {
+      zoomedRef.current = null;
+    },
+  });
 
-      // 纯修饰键:浏览器在按 Shift+X 时会先派发 key="Shift"。
-      // 不放行的话它会被当成序列的下一个键,把缓冲清掉。
-      if (["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"].includes(e.key)) return;
-      // Ctrl 系一律放行:这一页只练 <Space>w,不劫持 Ctrl+W 等浏览器快捷键
-      if (e.ctrlKey) return;
-
-      // <Space> 开序列
-      if (e.key === " ") {
-        e.preventDefault();
-        seq.current = [" "];
-        setPending("<Space>");
-        return;
-      }
-
-      const p = parse(e.key);
-      if (p.kind === "wait") {
-        // ⚠️ 这里必须把 p.next 写回缓冲 —— 三键序列全靠这一步。
-        // 见 lib/winkeys.parseSeq 顶部的注释:漏掉它的话
-        // <Space>w 之后的按键永远配不上,而 <C-w>x 两键却正常。
-        e.preventDefault();
-        seq.current = p.next;
-        setPending(p.shown);
-        return;
-      }
-      if (p.kind === "other") {
-        seq.current = [];
-        setPending(null);
-        return; // 放行,别劫持普通按键
-      }
-
-      e.preventDefault();
-      seq.current = [];
-      setPending(null);
-      setLog((l) => [...l, p.full]);
-
-      const w = findKey(p.key)!;
-      if (!w.modeled) {
-        setFlash({ ok: false, text: `${p.full}(${w.desc})—— 这一页还没建模它的效果` });
-        return;
-      }
-
-      const next = applyKey(p.key, v);
-      if (!next) {
-        setFlash({ ok: false, text: `${p.full} 按了但布局没变(当前布局下这个键无效)` });
-        return;
-      }
-      setV(next);
-
-      if (p.key === task.key) {
-        setFlash({ ok: true, text: `✓ ${p.full} — ${w.desc}` });
-        setSolved((s) => (s.includes(ti) ? s : [...s, ti]));
-        if (flashTimer.current) clearTimeout(flashTimer.current);
-        // 延迟给够看反馈:判对后立刻翻页重置会让人看不出那下生效没有
-        flashTimer.current = setTimeout(() => setTi((i) => (i + 1) % TASKS.length), 1600);
-      } else {
-        setFlash({ ok: false, text: `✗ 那是「${w.desc}」,本题要的是 ${task.key} —— ${task.desc}` });
-      }
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
-  }, [applyKey, parse, task, ti, v]);
-
-  const pos = positions(v.layout.root);
+  const task = TASK_OF.get(d.task.id)!;
+  const wk = findKey(task.key);
+  const pos = positions(d.state.layout.root);
 
   return (
     <div className="space-y-4">
-      {/* 选题 */}
-      <div className="flex flex-wrap gap-1.5">
-        {TASKS.map((t, i) => (
-          <button
-            key={t.key}
-            onClick={() => setTi(i)}
-            className={`rounded border px-2 py-0.5 text-xs ${
-              i === ti
-                ? "border-blue-400 bg-blue-400 text-black"
-                : solved.includes(i)
-                  ? "border-green-800 text-green-500"
-                  : "border-neutral-700 text-neutral-400 hover:bg-neutral-800"
-            }`}
-          >
-            {solved.includes(i) && i !== ti ? "✓ " : ""}
-            {t.key}
-          </button>
-        ))}
-        <button onClick={reset} className="ml-auto rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800">
-          重来
-        </button>
-      </div>
+      <TaskBar
+        tasks={DRILL_TASKS}
+        current={d.taskIndex}
+        solved={d.solved}
+        onPick={d.setTaskIndex}
+        onReset={d.reset}
+      />
 
       {/* 本题:一键两解 */}
-      <div className="rounded border border-neutral-800 bg-neutral-900/40 p-3 text-xs">
+      <TaskBox>
         <div className="flex flex-wrap items-baseline gap-2">
           <span className="text-neutral-300">按出</span>
           <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{task.key}</kbd>
@@ -265,7 +273,9 @@ export default function HydraDrill() {
               <div className="flex items-baseline gap-2">
                 <span className="w-12 shrink-0 text-neutral-600">更省事</span>
                 <kbd className="rounded bg-green-950 px-1.5 py-0.5 text-green-300">{wk.alt}</kbd>
-                <span className="text-neutral-600">实测本机有这个等价键,{wk.alt.length < wk.lazy.length ? "更短" : "不用进面板"} —— 哪个顺手用哪个</span>
+                <span className="text-neutral-600">
+                  实测本机有这个等价键,{wk.alt.length < wk.lazy.length ? "更短" : "不用进面板"} —— 哪个顺手用哪个
+                </span>
               </div>
             ) : (
               <div className="flex items-baseline gap-2">
@@ -280,34 +290,23 @@ export default function HydraDrill() {
             </div>
           </div>
         )}
-        {pending && (
-          <div className="mt-1 text-[11px] text-amber-300">等下一个键… {pending}</div>
-        )}
-      </div>
+        <PendingHint pending={d.pending} />
+      </TaskBox>
 
-      {/* 舞台 */}
-      <Stage pos={pos} focus={v.focus} />
+      <Stage pos={pos} focus={d.state.focus} />
 
-      {/* 已按的键 */}
-      <div className="flex min-h-5 flex-wrap items-center gap-1 text-[11px]">
-        {log.length === 0 ? (
-          <span className="text-neutral-700">
+      <KeyLog
+        log={d.log}
+        hint={
+          <>
             按 <kbd className="rounded bg-neutral-800 px-1">&lt;Space&gt;</kbd>
             <kbd className="rounded bg-neutral-800 px-1">w</kbd>
             <kbd className="rounded bg-neutral-800 px-1">{task.key}</kbd>
             三键连着按
-          </span>
-        ) : (
-          log.map((k, i) => (
-            <span key={i} data-keylog={i} className="rounded bg-neutral-800 px-1 text-blue-300">{k}</span>
-          ))
-        )}
-      </div>
-      {flash && (
-        <div data-flash={flash.ok ? "ok" : "bad"} className={`text-xs ${flash.ok ? "text-green-400" : "text-red-400"}`}>
-          {flash.text}
-        </div>
-      )}
+          </>
+        }
+      />
+      <FlashLine flash={d.flash} />
 
       <KeyTable highlight={task.key} />
     </div>
@@ -335,7 +334,9 @@ function KeyTable({ highlight }: { highlight: string }) {
               {rows.map((k) => (
                 <div
                   key={k.key}
-                  className={`flex gap-1.5 ${k.key === highlight ? "rounded bg-blue-950 px-1 text-blue-200" : "text-neutral-500"}`}
+                  className={`flex gap-1.5 ${
+                    k.key === highlight ? "rounded bg-blue-950 px-1 text-blue-200" : "text-neutral-500"
+                  }`}
                 >
                   <span className="w-9 shrink-0 font-bold text-purple-300">{k.key}</span>
                   <span className="w-28 shrink-0 text-blue-400/80">{k.lazy}</span>
@@ -356,21 +357,24 @@ function KeyTable({ highlight }: { highlight: string }) {
             <code>{k.key}</code> 不练 —— {k.skip}
           </div>
         ))}
-        <div className="mt-0.5">
+        <Provenance>
           键位实测自 <code>nvim_get_keymap("n")</code>。lhs 原文带前导空格(leader 是
           <code>&lt;Space&gt;</code>),所以 <code>&lt;Space&gt;wd</code> 在原文里是{" "}
-          <code> wd</code>。
-          hydra 入口实测是 <code>&lt;C-W&gt;&lt;Space&gt;</code>;
+          <code> wd</code>。hydra 入口实测是 <code>&lt;C-W&gt;&lt;Space&gt;</code>;
           headless 下进不去面板,leader 那一列按你口述收录,未由我实测。
-        </div>
+        </Provenance>
       </div>
     </div>
   );
 }
 
-
-
-function Stage({ pos, focus }: { pos: Map<number, { r0: number; r1: number; c0: number; c1: number }>; focus: number }) {
+function Stage({
+  pos,
+  focus,
+}: {
+  pos: Map<number, { r0: number; r1: number; c0: number; c1: number }>;
+  focus: number;
+}) {
   return (
     <div className="relative w-full rounded bg-neutral-950" style={{ height: 150 }}>
       {[...pos.entries()].map(([id, p]) => {
