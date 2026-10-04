@@ -264,6 +264,8 @@ export default function HydraDrill() {
         tasks={DRILL_TASKS}
         current={d.taskIndex}
         solved={d.solved}
+        solvedAll={d.solvedAll}
+        onClear={d.clearProgress}
         onPick={d.setTaskIndex}
         onReset={d.reset}
       />

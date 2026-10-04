@@ -27,6 +27,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { classify, mergeFirstKeys, shouldTake, type DrillTask } from "@/lib/drill";
+import { loadBoards, markSolved, saveBoards, type BoardProgress } from "@/lib/board-progress";
 
 export type Flash = { ok: boolean; text: string };
 
@@ -80,6 +81,9 @@ export type UseDrillOpts<S> = {
   onResetExtra?: () => void;
 };
 
+/** 稳定的空数组常量 —— 避免每次渲染都造新数组导致下游 memo 失效 */
+const EMPTY_IDS: string[] = [];
+
 export type UseDrill<S> = {
   task: DrillTask;
   taskIndex: number;
@@ -90,8 +94,18 @@ export type UseDrill<S> = {
   pending: string | null;
   log: string[];
   flash: Flash | null;
-  /** 本次会话里解开的题号(从 0 开始) */
+  /**
+   * 已解开的题的**题号**(从 0 开始)。
+   *
+   * ⚠️ 这是本次会话的进度。跨会话的持久化在 `solvedAll` ——
+   * 两个都要:前者让按钮变绿(需要立即反映),后者让首页仪表盘
+   * 知道「你上周做了多少」。
+   */
   solved: number[];
+  /** 跨会话:这个板块历史上做过的题号(从 localStorage 读) */
+  solvedAll: string[];
+  /** 清掉这个板块的跨会话进度(页面上的「清进度」按钮用) */
+  clearProgress: () => void;
   setTaskIndex: (i: number) => void;
   reset: () => void;
 };
@@ -116,6 +130,13 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
   const [log, setLog] = useState<string[]>([]);
   const [flash, setFlash] = useState<Flash | null>(null);
   const [solved, setSolved] = useState<number[]>([]);
+  /**
+   * 跨会话进度,首次渲染时从 localStorage 读一次。
+   *
+   * ⚠️ 用 lazy initializer 而不是 useEffect —— useEffect 会在首屏
+   * 之后再改一次状态,按钮会先全灰再变绿,闪一下。
+   */
+  const [boards, setBoards] = useState<BoardProgress>(() => loadBoards());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
@@ -139,6 +160,31 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
    */
   const bufRef = useRef(buf);
   bufRef.current = buf;
+
+  const boardId = opts.boardId;
+  const solvedAll = boards[boardId] ?? EMPTY_IDS;
+
+  /** 记一道题做过了 —— 立刻落盘,不给「关掉标签页就没了」留机会 */
+  const persist = useCallback(
+    (taskId: string) => {
+      setBoards((prev) => {
+        const next = markSolved(prev, boardId, taskId);
+        saveBoards(next);
+        return next;
+      });
+    },
+    [boardId],
+  );
+
+  /** 清掉本板块进度 */
+  const clearProgress = useCallback(() => {
+    setBoards((prev) => {
+      const next = { ...prev };
+      delete next[boardId];
+      saveBoards(next);
+      return next;
+    });
+  }, [boardId]);
 
   const firstKeys = useMemo(
     () => mergeFirstKeys(task.accept, ...(extraAccept ? [extraAccept] : [])),
@@ -235,6 +281,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
       setFlash({ ok: true, text: `✓ ${shown} —— ${cur.desc}` });
       const ti = taskIndexRef.current;
       setSolved((x) => (x.includes(ti) ? x : [...x, ti]));
+      persist(cur.id);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setTaskIndex((i) => (i + 1) % tasks.length), advanceMs);
     };
@@ -254,6 +301,8 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     log,
     flash,
     solved,
+    solvedAll,
+    clearProgress,
     setTaskIndex,
     reset,
   };

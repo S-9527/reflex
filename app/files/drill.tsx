@@ -101,6 +101,8 @@ export default function FileDrill() {
         tasks={TASKS}
         current={d.taskIndex}
         solved={d.solved}
+        solvedAll={d.solvedAll}
+        onClear={d.clearProgress}
         onPick={d.setTaskIndex}
         onReset={d.reset}
         labelOf={label}

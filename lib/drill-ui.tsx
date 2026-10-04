@@ -12,22 +12,33 @@
 import type { DrillTask } from "@/lib/drill";
 import type { Flash } from "./use-drill";
 
-/** 顶部的题号按钮条 */
+/**
+ * 顶部的题号按钮条。
+ *
+ * `solved` 是本次会话解开的(下标),`solvedAll` 是跨会话做过的(题 id)。
+ * 两个都要:后者让按钮在**一打开页面**就是绿的,不用先做一遍。
+ */
 export function TaskBar({
   tasks,
   current,
   solved,
+  solvedAll = [],
   onPick,
   onReset,
+  onClear,
   labelOf,
 }: {
   tasks: DrillTask[];
   current: number;
   solved: number[];
+  solvedAll?: string[];
   onPick: (i: number) => void;
   onReset: () => void;
+  /** 清掉跨会话进度。不给就不显示这个按钮 */
+  onClear?: () => void;
   labelOf?: (t: DrillTask) => string;
 }) {
+  const done = (i: number, id: string) => solved.includes(i) || solvedAll.includes(id);
   return (
     <div className="flex flex-wrap gap-1.5">
       {tasks.map((t, i) => (
@@ -38,12 +49,12 @@ export function TaskBar({
           className={`rounded border px-2 py-0.5 text-xs ${
             i === current
               ? "border-blue-400 bg-blue-400 text-black"
-              : solved.includes(i)
+              : done(i, t.id)
                 ? "border-green-800 text-green-500"
                 : "border-neutral-700 text-neutral-400 hover:bg-neutral-800"
           }`}
         >
-          {solved.includes(i) && i !== current ? "✓ " : ""}
+          {done(i, t.id) && i !== current ? "✓ " : ""}
           {labelOf ? labelOf(t) : t.short}
         </button>
       ))}
@@ -53,6 +64,15 @@ export function TaskBar({
       >
         重来
       </button>
+      {onClear && (
+        <button
+          onClick={onClear}
+          className="rounded border border-neutral-800 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-800"
+          title="清掉这个板块的进度(localStorage)"
+        >
+          清进度
+        </button>
+      )}
     </div>
   );
 }
