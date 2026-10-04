@@ -7,6 +7,7 @@ import { BUF_TASKS } from "@/lib/bufs";
 import { TAB_TASKS } from "@/lib/tabs";
 import { FILE_TASKS } from "@/lib/files";
 import { SPEC } from "@/lib/textobj";
+import { UI_TOGGLES } from "@/lib/ui-toggles";
 import { RAW } from "@/lib/bindings";
 import { loadBoards, boardSummary, clearBoard, saveBoards, type BoardProgress } from "@/lib/board-progress";
 import { load as loadSeq, reset as resetSeq, summarize, type Progress } from "@/lib/progress";
@@ -108,6 +109,20 @@ const BOARDS: Board[] = [
       </>
     ),
     total: SPEC.filter((s) => s.measured).length,
+    kind: "board",
+  },
+  {
+    id: "ui",
+    href: "/ui",
+    name: "界面开关",
+    what: (
+      <>
+        <K>&lt;Space&gt;u</K> 那一族,24 条。记号大小写很密(
+        <K>uL</K> <K>ul</K> <K>ug</K> <K>uz</K> <K>uZ</K> <K>uA</K> …),
+        边按边看画面怎么变
+      </>
+    ),
+    total: UI_TOGGLES.length,
     kind: "board",
   },
   {

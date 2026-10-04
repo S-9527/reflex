@@ -79,6 +79,17 @@ export type UseDrillOpts<S> = {
   noEffectText?: (matched: string[]) => string;
   /** 板子特有:每次换题后清掉的东西(如 hydra 的 zoom 备份) */
   onResetExtra?: () => void;
+  /**
+   * 换题时**保留**状态?
+   *
+   * 默认 false —— 绝大多数板块每题都从固定起点重来(buffer/tabs/windows 都是)。
+   *
+   * ⚠️ `u*` 那一族必须设成 true:那里状态是「哪些开关开着」,
+   * 累积才有意义。如果每题清空,用户连按三个开关就只能看到最后一个的效果,
+   * 「按了真的变了」这个反馈基本传达不出去 ——
+   * 这正是这一族唯一能可视化的东西。
+   */
+  keepStateOnAdvance?: boolean;
 };
 
 /** 稳定的空数组常量 —— 避免每次渲染都造新数组导致下游 memo 失效 */
@@ -121,6 +132,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     advanceMs = 1500,
     noEffectText,
     onResetExtra,
+    keepStateOnAdvance = false,
   } = opts;
 
   const [taskIndex, setTaskIndex] = useState(0);
@@ -210,8 +222,17 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
   }, []);
 
   useEffect(() => {
+    // ⚠️ keepStateOnAdvance 的板块(如 u* 那一族)换题不清状态,
+    //   否则「累积开着哪些开关」这个唯一的可视化就没了。
+    if (keepStateOnAdvance) {
+      setBuf([]);
+      setLog([]);
+      setFlash(null);
+      onResetExtra?.();
+      return;
+    }
     reset();
-  }, [taskIndex, reset]);
+  }, [taskIndex, reset, keepStateOnAdvance]);
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
