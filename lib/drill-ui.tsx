@@ -680,16 +680,29 @@ export function DiagNavView({
   diags,
   cursor,
   note,
+  kind = "diag",
 }: {
   /** 代码行 */
   source: string[];
-  /** 全部诊断 */
+  /** 列表里的条目（诊断或 quickfix 项） */
   diags: { lnum: number; endLnum: number; severity: 1 | 2 | 3 | 4; message: string }[];
   /** 当前光标行（0-based） */
   cursor: number;
   /** 上一次跳转的反馈 */
   note?: string;
+  /**
+   * 这是哪个列表。
+   *
+   * ⚠️ `]d` 和 `]q` 走的是**两个不同的列表**（诊断 vs Trouble/quickfix），
+   *    而且到头的行为也不同（绕回 vs 停住）。
+   *    画的时候要标出来，否则用户会把两族混成一个心智模型。
+   */
+  kind?: "diag" | "qf";
 }) {
+  const legend =
+    kind === "diag"
+      ? { title: "诊断列表", end: "]d 到头会绕回开头" }
+      : { title: "Trouble / quickfix 列表", end: "]q 到头会停住（E553），不绕回" };
   const sevColor: Record<number, string> = {
     1: "bg-red-500",
     2: "bg-amber-500",
@@ -708,7 +721,10 @@ export function DiagNavView({
 
   return (
     <div data-diag-nav className="rounded bg-neutral-950 p-3">
-      <div className="mb-1.5 flex items-baseline gap-3 text-[10px] text-neutral-600">
+      <div className="mb-1.5 flex flex-wrap items-baseline gap-3 text-[10px] text-neutral-600">
+        <span data-nav-kind={kind} className="text-neutral-400">
+          {legend.title}
+        </span>
         <span>光标在第 {cursor + 1} 行</span>
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-sm bg-blue-600" />光标
@@ -719,6 +735,7 @@ export function DiagNavView({
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-sm bg-amber-500" />警告
         </span>
+        <span className="ml-auto text-neutral-600">{legend.end}</span>
       </div>
 
       <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">

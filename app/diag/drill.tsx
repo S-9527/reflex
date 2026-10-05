@@ -37,7 +37,7 @@ import {
   streakOf,
 } from "@/lib/drill-ui";
 import { formatMs } from "@/lib/session";
-import { applyNav, isNavKey } from "@/lib/diag-nav";
+import { applyNav, applyQfNav, isNavKey, isQfKey } from "@/lib/diag-nav";
 
 /**
  * 诊断 / LSP 跳转练习。
@@ -148,22 +148,41 @@ export default function DiagDrill() {
      *
      * ⚠️ 用 `lib/diag-nav.ts` 的模型算，**不在这里手写下标逻辑**。
      *
-     * 那一族有一条容易搞错的行为：`]d` 到末尾**不绕回**
-     * （和 `:cnext` 会绕回是两回事）。这个判据在 diag-nav 里有
-     * 专门的回归测试盯着，手写在这里就会漏掉测试保护。
+     * 两族的行为**不一样**，各有实测依据（探针 `.probe/*.lua`）：
+     *
+     * | 键 | 到头 |
+     * |----|------|
+     * | `]d` / `[d` | **绕回** |
+     * | `]q` / `[q` | **停住**（报 E553） |
+     *
+     * 我第一版把两族当成一样（都是「列表里前后走」），差点画错。
+     * 判据都在 diag-nav 里，有专门的回归测试盯着 ——
+     * 手写在这里就会漏掉测试保护。
      *
      * 两套坐标一起更新：`line` 给画布高亮用，`cur` 给诊断详情用。
      */
-    if (!isNavKey(k.key === "]q" || k.key === "[q" ? k.key.replace("q", "d") : k.key)) {
+    const navState = { cursor: st.line, diags: sorted, note: "" };
+    let nav;
+    if (isQfKey(k.key)) {
+      nav = applyQfNav(navState, k.key);
+    } else if (isNavKey(k.key)) {
+      nav = applyNav(navState, k.key);
+    } else {
       return NO_EFFECT;
     }
-    const nav = applyNav(
-      { cursor: st.line, diags: sorted, note: "" },
-      // `]q`/`[q` 在 quickfix 列表里走，和诊断跳转同构，
-      // 这里复用同一套「下一个/上一个」语义
-      k.key === "]q" ? "]d" : k.key === "[q" ? "[d" : k.key,
-    );
-    if (nav.cursor === st.line) return NO_EFFECT;
+
+    if (nav.cursor === st.line) {
+      /**
+       * ⚠️ 没动 = 到边界了。但要区分两种情况：
+       *
+       * - **诊断跳转**：绕回了才「没动」是不可能的（绕回一定动），
+       *   所以这里的 note 就是「到头了」
+       * - **quickfix**：到头**停住**，note 里是 `E553` 报错文案
+       *
+       * 两种都返回 NO_EFFECT，让引擎统一提示 —— 不静默吞掉。
+       */
+      return NO_EFFECT;
+    }
     const idx = sorted.findIndex((x) => x.lnum === nav.cursor);
     return { cur: idx < 0 ? st.cur : idx, line: nav.cursor, picker: null };
   }, []);
@@ -304,12 +323,14 @@ export default function DiagDrill() {
         只画当前那条，用户看不到「还有几条、分别在哪些行、
         到头会不会绕回」。这些正是这一族最容易记错的地方。
       */}
-      {isNavKey(k.key) ? (
+      {isNavKey(k.key) || isQfKey(k.key) ? (
         <DiagNavView
           source={SRC}
           diags={sorted}
           cursor={d.state.line}
           note={d.flash?.text}
+          // ⚠️ 标出这是哪个列表 —— `]q` 走 quickfix，和 `]d` 是两族
+          kind={isQfKey(k.key) ? "qf" : "diag"}
         />
       ) : (
         <CodeView cur={cur} />
