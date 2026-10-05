@@ -160,3 +160,96 @@ describe("原生 Ex 等价是 ±2 不是 ±1", () => {
     }
   });
 });
+
+/**
+ * ⚠️⚠️ 回归测试：**每道题的起始状态都不能已经满足目标**。
+ *
+ * ## 这个 bug 你报的现象是「按什么键都没有反应」
+ *
+ * 根因：我用 `goal.cells >= 40` 猜「这题是放大还是缩小」——
+ *
+ * ```
+ * wider   目标 60  → 60 >= 40 → 放大 → 起始 40 >= 60? false ✅
+ * narrower 目标 20 → 20 >= 40 → 缩小 → 起始 40 <= 20? false ✅
+ * taller  目标 16  → 16 >= 40 → 缩小 → 起始 12 <= 16? TRUE ❌ 起始就"完成"
+ * shorter 目标 8   → 8  >= 40 → 缩小 → 起始 12 <= 8?  false ✅
+ * ```
+ *
+ * 「变高」那题起始就被判成完成 —— 引擎的终态模式只在**按键之后**
+ * 才检查 `isSolved`，所以用户按一下任意键就立刻过关，
+ * 看起来像「没反应」或者「乱跳」。
+ *
+ * 修法：方向**显式存在题目里**（`goal.dir`），不靠数值大小猜。
+ *
+ * ⚠️ 我当时只看了「变宽 60 / 变窄 20」两道，恰好都能蒙对 ——
+ *    所以这个 bug 藏到了你手动试的时候。
+ */
+describe("每道题的起始状态都不该已满足目标（回归）", () => {
+  /** 复刻 app/windows/resize.tsx 的题目定义 */
+  const GOALS = [
+    { id: "wider", axis: "v" as const, cells: 60, dir: "grow" as const },
+    { id: "narrower", axis: "v" as const, cells: 20, dir: "shrink" as const },
+    { id: "taller", axis: "h" as const, cells: 16, dir: "grow" as const },
+    { id: "shorter", axis: "h" as const, cells: 8, dir: "shrink" as const },
+  ];
+
+  const COLS = 80;
+  const ROWS = 24;
+
+  function startCells(axis: "v" | "h"): number {
+    const l = split(initial(), 1, axis)!;
+    const focus = l.nextId - 1;
+    const p = positions(l.root).get(focus)!;
+    return axis === "v"
+      ? Math.round((p.c1 - p.c0) * COLS)
+      : Math.round((p.r1 - p.r0) * ROWS);
+  }
+
+  it("四道题的起始状态都没到目标", () => {
+    for (const g of GOALS) {
+      const now = startCells(g.axis);
+      const solved = g.dir === "grow" ? now >= g.cells : now <= g.cells;
+      expect(solved, `${g.id}: 起始 ${now} 已满足目标 ${g.cells}（${g.dir}）`).toBe(false);
+    }
+  });
+
+  it("每题都真的要走几步（不是一步就完）", () => {
+    for (const g of GOALS) {
+      const now = startCells(g.axis);
+      const steps = Math.abs(g.cells - now) / 2; // 每次挪 2
+      expect(steps, `${g.id} 起始 ${now} 目标 ${g.cells} → 只需 ${steps} 步`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("方向是显式存的，不靠 cells 大小猜", () => {
+    // ⚠️ 这条守的是「不能再回到用 40 分界猜」的写法
+    for (const g of GOALS) {
+      expect(["grow", "shrink"], `${g.id} 缺 dir`).toContain(g.dir);
+    }
+    // 用大小猜的话 taller(16) 会被当成 shrink —— 那是错的
+    const taller = GOALS.find((g) => g.id === "taller")!;
+    expect(taller.dir, "变高是 grow，不是 shrink").toBe("grow");
+    expect(taller.cells < 40, "它的目标值确实小于 40（所以旧判据会猜错）").toBe(true);
+  });
+
+  it("每题都可达（按方向一路缩能到目标）", () => {
+    for (const g of GOALS) {
+      let l = split(initial(), 1, g.axis)!;
+      const focus = l.nextId - 1;
+      const total = g.axis === "v" ? COLS : ROWS;
+      const dir = g.dir === "grow" ? 1 : -1;
+      let reached = false;
+      for (let i = 0; i < 100; i++) {
+        const n = resizeByCells(l, focus, g.axis, dir as 1 | -1, total);
+        if (!n) break;
+        l = n;
+        const p = positions(l.root).get(focus)!;
+        const now = g.axis === "v"
+          ? Math.round((p.c1 - p.c0) * COLS)
+          : Math.round((p.r1 - p.r0) * ROWS);
+        if (g.dir === "grow" ? now >= g.cells : now <= g.cells) { reached = true; break; }
+      }
+      expect(reached, `${g.id} 到不了目标 ${g.cells}`).toBe(true);
+    }
+  });
+});

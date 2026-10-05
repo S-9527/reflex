@@ -67,16 +67,28 @@ const SCREEN_ROWS = 24;
 type ResizeState = { layout: Layout; focus: number };
 
 type ResizeTask = DrillTask & {
-  /** 要让哪个方向的尺寸变成多少 */
-  goal: { axis: "v" | "h"; cells: number };
+  /**
+   * 要让哪个方向的尺寸变成多少。
+   *
+   * ⚠️⚠️ `dir` 必须**显式存**，不能靠 `cells` 的大小猜。
+   *
+   * 我第一版用 `cells >= 40 ? 放大 : 缩小` 来猜方向 —— 于是
+   * 「变高」（目标 16 行）被当成缩小，`isSolved` 判成
+   * `12 <= 16` = true，**起始状态就满足条件**。
+   * 用户按什么都没反应（因为引擎认为这题已经做完了）。
+   *
+   * 这个 bug 只有「目标值 < 40」的那两题会触发 —— 而我当时
+   * 只看了「变宽 60 / 变窄 20」两道，恰好都能蒙对。
+   */
+  goal: { axis: "v" | "h"; cells: number; dir: "grow" | "shrink" };
 };
 
 /** 目标尺寸（列或行） */
 const GOALS = {
-  wider: { axis: "v" as const, cells: 60 },
-  narrower: { axis: "v" as const, cells: 20 },
-  taller: { axis: "h" as const, cells: 16 },
-  shorter: { axis: "h" as const, cells: 8 },
+  wider: { axis: "v" as const, cells: 60, dir: "grow" as const },
+  narrower: { axis: "v" as const, cells: 20, dir: "shrink" as const },
+  taller: { axis: "h" as const, cells: 16, dir: "grow" as const },
+  shorter: { axis: "h" as const, cells: 8, dir: "shrink" as const },
 };
 
 const TASKS: ResizeTask[] = [
@@ -160,13 +172,21 @@ export default function ResizeDrill() {
     }
   }, []);
 
-  /** 到了吗 —— 目标尺寸对不对 */
+  /**
+   * 到了吗 —— 目标尺寸对不对。
+   *
+   * ⚠️ 方向从 `goal.dir` 读（显式），**不用数值大小猜**。
+   *    用 `cells >= 40` 猜的那版会让「变高」（16 行）被当成缩小，
+   *    于是起始状态就判成完成，用户按什么都没反应。
+   *
+   * 判据是 `>=` / `<=` 而不是 `===`：用户可能一次按过头，
+   * 那时也该算过（否则这题永远做不完）。
+   */
   const isSolved = useCallback((s: ResizeState, t: DrillTask) => {
     const task = TASK_OF.get(t.id);
     if (!task) return false;
     const now = cellsOf(s, task.goal.axis);
-    // 达标 or 已经过了（防止用户缩过头就永远做不完）
-    return task.goal.cells >= 40 ? now >= task.goal.cells : now <= task.goal.cells;
+    return task.goal.dir === "grow" ? now >= task.goal.cells : now <= task.goal.cells;
   }, []);
 
   /**
@@ -228,6 +248,34 @@ export default function ResizeDrill() {
 
       <TaskBox>
         <div className="text-neutral-300">{task.desc}</div>
+
+        {/*
+          ⚠️⚠️ 这里**必须明确写出按哪几个键**。
+          
+          原来的问题：这一族用终态判定（`accept: []`），所以
+          `d.shownKeys` 是**空的** —— KeySequence 什么都不显示。
+          整页只有底部一行小字提了句「按 <C-方向键>」，
+          用户根本不知道要练什么键（你报的就是这个）。
+          
+          序列匹配的板块不存在这个问题（题目区会画出解法格子），
+          但终态判定的三个模式（jump/build/resize）都要自己说清楚。
+        */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="text-neutral-500">按</span>
+          {keysFor(task.goal).map((k) => (
+            <kbd
+              key={k}
+              data-hint-key={k}
+              className="rounded bg-blue-950 px-2 py-0.5 font-mono text-blue-200"
+            >
+              {k}
+            </kbd>
+          ))}
+          <span className="text-neutral-500">
+            {task.goal.dir === "grow" ? "放大" : "缩小"}这个窗口
+          </span>
+        </div>
+
         <div className="mt-2 flex flex-wrap items-baseline gap-x-4 text-[11px]">
           <span className="text-neutral-500">
             当前 <b className="text-neutral-300">{now}</b> {unit}
@@ -235,18 +283,23 @@ export default function ResizeDrill() {
           <span className="text-neutral-500">
             目标 <b className="text-yellow-400">{task.goal.cells}</b> {unit}
           </span>
-          {!canDir && (
-            <span className="text-amber-500/90">
-              这个方向没有可调的分割点
-            </span>
-          )}
+          <span className="text-neutral-600">
+            还差 <b className="text-neutral-400">{Math.abs(task.goal.cells - now)}</b> {unit}
+            （约 {Math.abs(task.goal.cells - now) / 2} 次）
+          </span>
+          {!canDir && <span className="text-amber-500/90">这个方向没有可调的分割点</span>}
         </div>
+
         <div className="mt-2 text-[10px] text-neutral-600">
           ⚠️ 每次只挪 <b>2 {unit}</b>，加计数没用（步长写死在映射里）
         </div>
-        <div className="mt-2">
-          <KeySequence keys={d.shownKeys} feed={d.keyFeed} />
-        </div>
+
+        {/* 已经按过的键 —— 给逐键反馈 */}
+        {d.keyFeed.length > 0 && (
+          <div className="mt-2">
+            <KeySequence keys={d.keyFeed.map((f) => f.key)} feed={d.keyFeed} />
+          </div>
+        )}
       </TaskBox>
 
       <SizeView state={d.state} axis={task.goal.axis} goal={task.goal.cells} />
@@ -264,6 +317,20 @@ export default function ResizeDrill() {
       </Provenance>
     </DrillFlow>
   );
+}
+
+/**
+ * 这道题该按哪几个键。
+ *
+ * ⚠️ 终态判定的板块（jump / build / resize）用 `accept: []`，
+ *    所以题目区**不会**自动画出解法格子 —— 必须自己说清楚按什么。
+ *    序列匹配的板块不存在这个问题。
+ */
+function keysFor(goal: { axis: "v" | "h"; dir: "grow" | "shrink" }): string[] {
+  if (goal.axis === "v") {
+    return goal.dir === "grow" ? ["<C-Right>"] : ["<C-Left>"];
+  }
+  return goal.dir === "grow" ? ["<C-Down>"] : ["<C-Up>"];
 }
 
 /** 浏览器事件 → 面板记法（只认 Ctrl + 方向键） */
