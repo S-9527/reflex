@@ -178,3 +178,49 @@ export function mergeFirstKeys(...seqs: string[][]): Set<string> {
 export function seqOf(...keys: string[]): string[] {
   return keys;
 }
+
+/**
+ * 逐键反馈：某一键按下去之后，这一键是对是错。
+ *
+ * ⚠️ 定义放在这个纯逻辑模块里（而不是 use-drill.ts）——
+ *    这样 `pushFeed` 能被单测直接 import，不用拉起 React。
+ */
+export type KeyFeedback = {
+  /** 第几个键（从 0 开始） */
+  index: number;
+  /** 实际按的键 */
+  key: string;
+  /** 这一键对不对 */
+  ok: boolean;
+};
+
+/**
+ * 往逐键反馈里加一条 —— **并清掉该位置及之后的旧反馈**。
+ *
+ * ## ⚠️ 为什么不能直接 append
+ *
+ * 「停住纠错」的交互是：按错了不清空缓冲，用户在原位接着按对的。
+ * 于是同一个位置会被按多次：
+ *
+ * ```
+ * 按 <Space>  → feed[0] = {0, "<Space>", true}
+ * 按 x（错）   → feed[1] = {1, "x", false}      buf 还是 ["<Space>"]
+ * 按 b（对）   → feed[2] = {1, "b", true}       buf 变成 ["<Space>","b"]
+ * ```
+ *
+ * 现在 index 1 有**两条**记录。UI 用 `find()` 取第一条，
+ * 于是显示的是**过期的** `x`（红色）—— 用户明明已经改对了，
+ * 界面却还在报错。
+ *
+ * 修法：在位置 N 按键，意味着 N 及之后都要重新走，
+ * 所以先把 `index >= N` 的旧记录全删掉再加新的。
+ * 这样同一位置的记录永远只有一条，`find()` 也就是安全的。
+ */
+export function pushFeed(
+  feed: KeyFeedback[],
+  index: number,
+  key: string,
+  ok: boolean,
+): KeyFeedback[] {
+  return [...feed.filter((x) => x.index < index), { index, key, ok }];
+}

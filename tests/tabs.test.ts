@@ -13,12 +13,25 @@ import {
   goTo,
   stateFrom,
   applyTabKey,
-  SOLUTIONS,
   normSeq,
   toPanelKey,
   TAB_TASKS,
   type TabState,
 } from "../lib/tabs";
+import { COMMANDS } from "../lib/bindings";
+
+/**
+ * ⚠️ 解法不再来自 `lib/tabs.ts` 的手写 `SOLUTIONS` 表（已删）。
+ *
+ * 那张表把键写成 `<Tab>d`，而真实 lhs 是 `<Space><Tab>d` ——
+ * 漏了 leader 前缀。现在统一从 `COMMANDS` 取。
+ *
+ * 这里复刻 `app/tabs/drill.tsx` 的 `commandFor()` 逻辑，
+ * 断言「每个 tab 题目都能在真实数据里找到对应命令」。
+ */
+const CMD_BY_DISPLAY = new Map(COMMANDS.map((c) => [c.display, c]));
+const commandFor = (t: { key: string }) =>
+  CMD_BY_DISPLAY.get(`<Space>${t.key}`) ?? CMD_BY_DISPLAY.get(t.key) ?? null;
 
 /** 造一个 n 个 tab、当前在 cur 的状态 */
 const st = (n: number, cur = 0): TabState => stateFrom({ key: "", desc: "", tabs: n, curIndex: cur });
@@ -148,47 +161,70 @@ describe("toPanelKey —— 浏览器 key 要转成面板记法", () => {
     expect(toPanelKey("l")).toBe("l");
   });
 
-  it("按真实按键拼出来的序列,每道题都命中自己的解法", () => {
-    // 每个 tab 操作:第一键都是浏览器报的 "Tab"
+  /**
+   * 把解法里的每个键反推回浏览器 key，再正向转回来，应该一模一样。
+   *
+   * 这条守的是「面板记法 ↔ 浏览器 key」的双向一致性 ——
+   * 单向对不代表双向对（`<Tab>` 就是典型：浏览器报 "Tab"，
+   * 而面板记法是 "<Tab>"，直接拼会得到 "<Tab>Tab"）。
+   */
+  it("解法逐键反推回浏览器 key 再转回来,结果一致", () => {
     for (const t of TAB_TASKS) {
-      const seqs = SOLUTIONS[t.key].seqs;
-      for (const s of seqs) {
-        // 模拟:把面板记法反推回浏览器 key,再正向转回来
-        const browserKeys = s.map((x) => (x === "<Tab>" ? "Tab" : x));
-        const rebuilt = browserKeys.map(toPanelKey);
-        expect(normSeq(rebuilt), `${t.key} 反推失败`).toBe(normSeq(s));
-      }
+      const cmd = commandFor(t)!;
+      // 真实键：leader 在浏览器里就是一个空格字符
+      const browserKeys = cmd.display
+        .replace(/<Space>/g, " ")
+        .match(/<[^>]+>|./g)!
+        .map((x) => (x === "<Space>" ? " " : x));
+      const rebuilt = browserKeys.map((x) => (x === " " ? "<Space>" : toPanelKey(x)));
+      expect(rebuilt.join(""), `${t.key} 反推失败`).toBe(cmd.display);
     }
   });
 
   it("⚠️ <Tab><Tab> 这一题:两个浏览器 key 都是 Tab", () => {
-    const s = SOLUTIONS["<Tab><Tab>"].seqs[0];
-    expect(s).toEqual(["<Tab>", "<Tab>"]);
+    const cmd = commandFor({ key: "<Tab><Tab>" })!;
+    // 真实键是 <Space><Tab><Tab>，不是手写表里漏了 leader 的 <Tab><Tab>
+    expect(cmd.display).toBe("<Space><Tab><Tab>");
     const rebuilt = ["Tab", "Tab"].map(toPanelKey);
     expect(rebuilt).toEqual(["<Tab>", "<Tab>"]);
   });
 });
 
-describe("SOLUTIONS 完整性", () => {
-  it("每道题都有解法", () => {
+describe("解法来自真实数据(COMMANDS)", () => {
+  it("每道 tab 题都能在数据集里找到命令", () => {
     for (const t of TAB_TASKS) {
-      expect(SOLUTIONS[t.key], `${t.key} 没有解法表`).toBeDefined();
-      expect(SOLUTIONS[t.key].seqs.length).toBeGreaterThan(0);
+      expect(commandFor(t), `${t.key} 找不到对应命令`).not.toBeNull();
     }
   });
 
-  it("每道题都有原生参考", () => {
+  /**
+   * ⚠️ 回归测试：手写表在这错过。
+   *
+   * 它把键写成 `<Tab>d`，漏了 leader 前缀。真实的 lhs 是
+   * `<Space><Tab>d`（leader 是真实空格）。
+   * 少一个 `<Space>` = 训练器教的键在真 nvim 里按不出来。
+   */
+  it("解法带 <Space> leader 前缀(手写表在这漏过)", () => {
     for (const t of TAB_TASKS) {
-      expect(SOLUTIONS[t.key].native, `${t.key} 缺原生参考`).toBeTruthy();
+      const cmd = commandFor(t)!;
+      expect(cmd.display, `${t.key} 的键漏了 leader`).toMatch(/^<Space>/);
     }
   });
 
-  it("每条解法都是 2 键(以 <Tab> 开头)", () => {
+  it("每道题都有原生 Ex 参考", () => {
     for (const t of TAB_TASKS) {
-      for (const s of SOLUTIONS[t.key].seqs) {
-        expect(s[0]).toBe("<Tab>");
-        expect(s.length).toBe(2);
-      }
+      const cmd = commandFor(t)!;
+      expect(cmd.native, `${t.key} 缺原生参考`).toBeTruthy();
+    }
+  });
+
+  it("解法是 3 键(<Space> + <Tab> + 面板键)", () => {
+    for (const t of TAB_TASKS) {
+      const cmd = commandFor(t)!;
+      const keys = cmd.display.match(/<[^>]+>|./g) ?? [];
+      expect(keys.length, `${t.key} 的键数不对: ${cmd.display}`).toBe(3);
+      expect(keys[0]).toBe("<Space>");
+      expect(keys[1]).toBe("<Tab>");
     }
   });
 });

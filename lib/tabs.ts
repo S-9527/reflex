@@ -157,49 +157,27 @@ export function stateFrom(t: TabTask): TabState {
 }
 
 /**
- * 每个操作的解法。
+ * ## 解法表已删除（原来这里有个手写的 `SOLUTIONS`）
  *
- * ## 键位侧:每个操作**只绑了一个键**
+ * 那张表把 tab 键写成了 **`<Tab>d`**，而本机实测的真实 lhs 是
+ * **`<Space><Tab>d`** —— **漏了 leader 前缀**（`nvim_get_keymap` 里
+ * leader 是一个真实空格）。少一个 `<Space>` 意味着训练器教的键
+ * 在真 nvim 里**按不出来**。
  *
- * 按 rhs 聚合 `nvim_get_keymap("n")` 的结果 —— 七个 `<Tab>*` 操作
- * 的 rhs 各不相同,每行下面都只有一个 lhs。所以 tab 这一族
- * 没有 buffer 那样的同义键可挑,别硬凑。
+ * 解法现在统一来自 `lib/bindings.ts` 的 `COMMANDS`（build 阶段按 rhs 聚合），
+ * 见 `app/tabs/drill.tsx` 的 `commandFor()`。
  *
- * ## native 侧:逐条在真 nvim 里 feedkeys 验过
+ * ## ⚠️ 两条实测发现必须留着（它们不在数据里，是人工验证的结论）
  *
- * ⚠️ 两个实测发现,不能照抄 Vim 文档:
- *
- * 1. **`:tn` / `:tl` 在本机不生效**。`:tabnext` 让 cur 1→2,
- *    而 `:tn` 是 1→1(无变化)。所以这两个缩写**没有**写进 native ——
+ * 1. **`:tn` / `:tl` 在本机不生效**。`:tabnext` 让 cur 1→2，
+ *    而 `:tn` 是 1→1（无变化）。所以这两个缩写**不能**当作原生等价 ——
  *    写上去等于教一个在你机器上不灵的东西。
- * 2. **`:tabnext` 在末尾会绕回第一个**(cur 4→1),
- *    但键位 `<Tab>]` 是**到头就停**。同一件事,两种行为。
- *    这是最容易踩的一个,所以在界面上单独标了出来。
+ * 2. **`:tabnext` 在末尾会绕回第一个**（实测 cur 4→1），
+ *    但键位 `<Tab>]` 是**到头就停**。同一件事，两种行为。
+ *    这是最容易踩的一个。
+ *
+ * 这两条现在写在 `app/tabs/drill.tsx` 的 `LOOKALIKE` / `NativeRef` 附近。
  */
-export const SOLUTIONS: Record<
-  string,
-  { seqs: string[][]; native?: string; note?: string }
-> = {
-  "<Tab><Tab>": {
-    seqs: [['<Tab>', '<Tab>']],
-    native: ":tabnew  /  :tabe",
-    note: "新 tab 会带上当前窗口的窗口(和 :tab split 一样)",
-  },
-  "<Tab>d": { seqs: [['<Tab>', 'd']], native: ":tabclose  /  :tabc" },
-  "<Tab>o": { seqs: [['<Tab>', 'o']], native: ":tabonly  /  :tabo" },
-  "<Tab>]": {
-    seqs: [['<Tab>', ']']],
-    native: ":tabnext",
-    note: "⚠ 键位到头就停,但 :tabnext 会绕回第一个 —— 实测 cur 4→1",
-  },
-  "<Tab>[": {
-    seqs: [['<Tab>', '[']],
-    native: ":tabprevious",
-    note: "⚠ 别和 <Tab>] 混:那个到头停,这个到头也停(但方向相反)",
-  },
-  "<Tab>f": { seqs: [['<Tab>', 'f']], native: ":tabfirst" },
-  "<Tab>l": { seqs: [['<Tab>', 'l']], native: ":tablast" },
-};
 
 /** 把一个 Vim 记法序列归一化成可比对的字符串 */
 export function normSeq(seq: string[]): string {

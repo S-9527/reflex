@@ -6,8 +6,8 @@ import LayoutView from "@/components/layout-view";
 import KeymapView from "@/components/keymap-view";
 import StatsView, { type StatsSection } from "@/components/stats-view";
 import { splitLhs } from "@/lib/keys";
-import { LEVEL_NAMES, RAW } from "@/lib/bindings";
-import { load, type Progress } from "@/lib/progress";
+import { GROUPS, RAW } from "@/lib/bindings";
+import * as SRS from "@/lib/srs";
 import type { Binding } from "@/lib/matcher";
 import type { Layout } from "@/lib/layout";
 
@@ -16,7 +16,8 @@ const BINDINGS = RAW.map((r) => ({ ...r, keys: splitLhs(r.display) })) as Bindin
 const TABS = [
   { id: "live", label: "我的 nvim" },
   { id: "keys", label: "键位位置" },
-  { id: "levels", label: "关卡分布" },
+  { id: "boards", label: "按板块" },
+  { id: "groups", label: "分组分布" },
   { id: "modes", label: "模式" },
   { id: "tree", label: "leader 子树" },
   { id: "length", label: "按键长度" },
@@ -26,12 +27,12 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function StatsPage() {
   const [tab, setTab] = useState<TabId>("live");
-  const [progress, setProgress] = useState<Progress | null>(null);
+  const [progress, setProgress] = useState<SRS.Progress | null>(null);
   const [layout, setLayout] = useState<Layout | null>(null);
   const [err, setErr] = useState("");
   const [path, setPath] = useState("");
 
-  useEffect(() => setProgress(load()), []);
+  useEffect(() => setProgress(SRS.load()), []);
 
   const loadLayout = useCallback(async () => {
     try {
@@ -87,11 +88,11 @@ export default function StatsPage() {
 
       <div className="mt-5">
         {tab === "live" && <LivePanel layout={layout} err={err} path={path} />}
-        {tab === "keys" && <KeymapView bindings={BINDINGS} />}
+        {tab === "keys" && <KeymapView bindings={BINDINGS} groupNames={GROUPS} />}
         {progress && tab !== "live" && tab !== "keys" && (
           <StatsView
             bindings={BINDINGS}
-            levelNames={LEVEL_NAMES}
+            groupNames={GROUPS}
             progress={progress}
             only={[tab as StatsSection]}
           />

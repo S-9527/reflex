@@ -1,249 +1,493 @@
 /**
- * 数据集构建:从 data/raw-lazyvim.json 生成 lib/bindings.ts
+ * 数据集构建：从 data/keymaps.json 生成 lib/bindings.ts
  *
- * 跑:npx tsx scripts/build-dataset.mjs
- * 或直接用 node(这个脚本不 import TS,纯 JS)
+ * 跑：node scripts/build-dataset.mjs
+ *
+ * ## 和旧版的区别（这是重写的全部理由）
+ *
+ * | | 旧版 | 现在 |
+ * |---|---|---|
+ * | 数据源 | raw-lazyvim.json（无 rhs、无分组） | keymaps.json（有 rhs、有 which-key 分组） |
+ * | 分组 | **手写前缀规则猜的** | which-key 的真实分组 |
+ * | 等价解 | 手写表 `SOLUTIONS`，实测既多又少 | 按 rhs 聚合算出来的 |
+ * | 关卡 | 手编「第 x 关」 | 废弃，改用分组 |
+ *
+ * ## 为什么等价解要双轨
+ *
+ * 有 rhs 的键（158 条）：**rhs 相同 = 底层同一条命令**，这是严格判据。
+ *
+ * 没有 rhs 的键（229 条）：是 Lua 回调，看不出调了什么。
+ * 但它们的 `desc` 是插件自己上报的，同 desc = 同一个功能 ——
+ * 这是**弱判据**，实测有效（`Toggle Zoom Mode` 的 `<Space>uZ` / `<Space>wm`）。
+ * 所以用它兜底，但在数据里标出来是弱判据。
+ *
+ * 旧版只有手写表，既漏了 `j`/`<Down>` 这种，又把 `<Space>bb` 错当成 `L` 的等价解
+ * （它其实是 `` ` `` 的，rhs 是 `<Cmd>e #<CR>`，跟 `BufferLineCycleNext` 是两条命令）。
  */
+
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const raw = JSON.parse(readFileSync(join(root, "data/raw-lazyvim.json"), "utf8"));
+const src = JSON.parse(readFileSync(join(root, "data/keymaps.json"), "utf8"));
 
-/** Neovim 的 lhs 里,leader 是真空格,不是 <Space>。统一成 <Space> 记法。 */
+/** Neovim 的 lhs 里，leader 是真空格，不是 <Space>。统一成 <Space> 记法。 */
 function toVimNotation(lhs) {
-  return lhs
-    .replace(/^ /, "<Space>")
-    .replace(/ /g, " ") // 其余空格保留原样(理论上不该有)
-    .replace(/\u00a0/g, " ");
+  return lhs.replace(/^ /, "<Space>");
 }
 
 /**
- * leader 第二字符 → 关卡。顺序即学习顺序。
- * 依据:「你现在能做什么」,不是官方分类。
- * 窗口(w)排很前是因为那是你当前的弱项。
- */
-// 注意顺序:长前缀在前,<Space> 兜底必须放最后,
-// 否则 `find()` 会先命中 <Space> 把所有 leader 键都吞进 leader-other。
-//
-// ⚠️ 分屏键为什么是精确匹配而不是前缀:
-// LazyVim 16 里创建窗口不是 <Space>ws / <Space>wv(那是书里的旧键),
-// 而是 <Space>| 和 <Space>-。它们不匹配任何 leader 子树,
-// 所以必须显式列出来 —— 否则会掉进 leader-other 兜底桶排到第 10 关,
-// 而「窗口」组里就一个创建窗口的键都没有,逻辑上不成立
-// (能跳窗口却不能创建,现实中的顺序是先分屏再跳)。
-const GROUPS = [
-  // 窗口排第 1 关:这是用户当前自评的弱项
-  { prefix: "<Space>w", key: "window", label: "窗口", level: 1 },
-  { prefix: "<Space>b", key: "buffer", label: "缓冲区", level: 2 },
-  { prefix: "<Space>f", key: "file", label: "文件查找", level: 3 },
-  { prefix: "<Space>q", key: "session", label: "会话", level: 4 },
-  { prefix: "<Space>g", key: "git", label: "Git", level: 5 },
-  { prefix: "<Space>c", key: "code", label: "代码 / LSP", level: 6 },
-  { prefix: "<Space>s", key: "search", label: "搜索替换", level: 7 },
-  { prefix: "<Space>u", key: "ui", label: "界面", level: 8 },
-  { prefix: "<Space>l", key: "lazy", label: "插件管理", level: 9 },
-  { prefix: "<Space>", key: "leader-other", label: "其他 leader 键", level: 10 },
-];
-
-/**
- * 裸键(不带 leader)按前缀分类 —— 第 4 关曾经有 74 条全落在
- * classifyBare 的"多键序列"兜底里,混着三种完全不同的技能。
+ * which-key 分组 → 中文名。
  *
- * 拆开的原因:74 条一关练不完,而且里面一半是低频键。
- * 拆成「上一个/下一个」「文本对象 / 注释」「LSP」「跳转 / 其他」四关,
- * 每关十几到二十条,才练得完。
+ * 这些名字直接来自 LazyVim 的 `group = "..."`（editor.lua:68-93），
+ * 不是我编的分类 —— 所以它天然和 which-key 面板里看到的一致。
  */
-const BARE_PREFIX = [
-  // [d ]d [w ]w [b ]b [t ]t [e ]e [q ]q [D ]D —— 高频,成对出现好记
-  { re: /^[[\]][[a-zA-Z]$/, key: "prevnext", label: "上一个 / 下一个", level: 11 },
-  { re: /^[[\]]<?<C-[LQT]>?$/, key: "listjump", label: "列表跳转(少用)", level: 12 },
-  // 文本对象与注释:第 7 章核心
-  { re: /^(al|an|il|in|gc|gcc|gco|gcO)$/, key: "textobj", label: "文本对象 / 注释", level: 13 },
-  // LSP:gri grn gra gO 等,buffer-local 与全局的差异见 memo 笔记
-  { re: /^(gr[a-zA-Z]+|g[a-zA-Z]I?|gO|g;|g[gG][a-zA-Z]+)$/, key: "lsp-bare", label: "LSP / 跳转(g 前缀)", level: 14 },
-  // g[ g] 双向跳转等
-  { re: /^g[[\]`'"<>{}$(]/, key: "jump-bare", label: "跳转标记", level: 14 },
-];
-
-/**
- * 降级名单:从第 1 关挪到第 9 关的键。
- *
- * 抽出来单独放,是为了能被 tests/dataset.test.ts 断言 ——
- * 分级是最容易被"重跑脚本 + 手改排序"悄悄改坏的东西。
- */
-export const DEMOTED = {
-  // 窗口调整大小:书 9.3.5 说该配计数用或直接拖鼠标,裸按没意义
-  "<C-Up>": 9,
-  "<C-Down>": 9,
-  "<C-Left>": 9,
-  "<C-Right>": 9,
+const GROUP_LABELS = {
+  search: "搜索",
+  goto: "跳转",
+  ui: "界面",
+  prev: "上一个",
+  next: "下一个",
+  git: "Git",
+  "file/find": "文件查找",
+  code: "代码 / LSP",
+  "diagnostics/quickfix": "诊断 / quickfix",
+  "quit/session": "退出 / 会话",
+  buffer: "缓冲区",
+  windows: "窗口",
+  tabs: "标签页",
+  debug: "调试",
+  profiler: "性能分析",
+  hunks: "代码块",
+  surround: "包围",
+  fold: "折叠",
 };
 
-/**
- * 没有 leader 前缀的键(裸键)分组。
- *
- * ⚠️ 窗口键是重点:你机器上 LazyVim 16 已经**不教** `<C-w>h/j/k/l` 了,
- * 换成了 `<C-H/J/K/L>` 导航。所以窗口组必须同时收 leader 版和 Ctrl 版。
- */
-const CTRL_WINDOW_NAV = new Set([
-  "<C-H>", "<C-J>", "<C-K>", "<C-L>", // 切换窗口 —— 每次多窗口都用
-]);
-
-/**
- * 调整大小的 4 条。降级到第 9 关(和插件管理同级)。
- *
- * ## 为什么降级而不是删掉
- *
- * 用户自己提的判断,并且书支持:
- * - 书 9.3.5 原话:「the easiest way to resize Vim splits is to use… *the mouse*」
- * - 同一节还说键盘方式「只移动一行或一列,所以你几乎肯定要
- *   **在前面加一个大于 10 的计数**」—— 也就是裸按没意义
- * - 裸按 `<C-Up>` 挪一行,真实场景要的是 `20<C-Up>`
- *
- * 删掉的话以后真要用还得回来查。留在题库第 9 关,不打���核心关卡。
- */
-const CTRL_WINDOW_RESIZE = new Set([
-  "<C-Up>", "<C-Down>", "<C-Left>", "<C-Right>",
-]);
-
-function classifyBare(lhs) {
-  if (CTRL_WINDOW_NAV.has(lhs)) return { key: "window", label: "窗口", level: 1 };
-  if (CTRL_WINDOW_RESIZE.has(lhs)) return { key: "window-resize", label: "窗口调整大小", level: 9 };
-  if (lhs === "jk") return { key: "mine", label: "我自己的映射", level: 1 };
-
-  // 裸键优先按 BARE_PREFIX 精确归类。放在 Ctrl / 特殊键之前,
-  // 因为 `]<C-L>` 这类要进"列表跳转"而不是"特殊键"。
-  for (const p of BARE_PREFIX) {
-    if (p.re.test(lhs)) return { key: p.key, label: p.label, level: p.level };
-  }
-
-  if (/^<C-[bB]/.test(lhs)) return { key: "ctrl-b", label: "Ctrl-b 系列", level: 5 };
-  if (/^</.test(lhs)) return { key: "special", label: "特殊键", level: 6 };
-  if (/^[A-Z]/.test(lhs)) return { key: "upper", label: "大写键", level: 3 };
-  if (lhs.length === 1) return { key: "single", label: "单键", level: 2 };
-  // 兜底:真的归不了类的。level 15,排在所有专题之后 ——
-  // 以前它叫"多键序列"排第 4 关,和会话混在一起,79 条练不完。
-  return { key: "bare-rest", label: "其他裸键", level: 15 };
+/** 没有 which-key 分组的键归到哪 —— 按形态给个诚实的名字，不硬塞进某个组。 */
+function fallbackGroup(vim, mode) {
+  if (vim.startsWith("<Space>")) return { key: "leader-misc", label: "leader 其它" };
+  if (/^<(C|M|S)-/.test(vim)) return { key: "ctrl-misc", label: "Ctrl / Alt 其它" };
+  if (mode === "i") return { key: "insert", label: "Insert 模式" };
+  if (mode === "v" || mode === "x" || mode === "s") return { key: "visual", label: "Visual 模式" };
+  if (mode === "o") return { key: "operator", label: "Operator-pending" };
+  if (mode === "c") return { key: "cmdline", label: "命令行模式" };
+  if (mode === "t") return { key: "terminal", label: "终端模式" };
+  if (vim.length === 1) return { key: "bare", label: "裸键" };
+  return { key: "other", label: "其它" };
 }
 
-const out = [];
-const skipped = { nodesc: 0, weird: 0, autopair: 0, insert: 0, helpref: 0 };
+/**
+ * which-key 的分组前缀表：`<Space>b` → `buffer`。
+ *
+ * ## ⚠️ 为什么要在 build 阶段重新解析，而不是直接用每条键的 `group`
+ *
+ * `keymaps.json` 里**同一个 lhs 有两条分组记录**：
+ *
+ * ```
+ * { lhs: " b", group: true,    desc: "buffer" }   ← which-key 自动推断
+ * { lhs: " b", group: "buffer" }                  ← LazyVim 显式声明
+ * ```
+ *
+ * 抽取脚本按「最长前缀」归组，两条长度相同，`true` 那条先匹配上 ——
+ * 于是 10 条 `<Space>b*` 全被归到了兜底的 `leader-misc`，
+ * 而不是真实的 `buffer`。
+ *
+ * 所以这里**以显式命名为准**重建前缀表：同名前缀下，非 `true` 的赢。
+ */
+const groupPrefixes = new Map(); // lhs → 分组名
+for (const g of src.groups ?? []) {
+  if (!g.lhs) continue;
+  // ⚠️ 必须和键位用同一套记法。分组写 `" b"`（真实空格），
+  //   而键位经 toVimNotation 后是 `"<Space>bd"` —— 不转就永远匹配不上，
+  //   所有 leader 键会掉进兜底桶（实测：134 条掉进「leader 其它」）。
+  const lhs = toVimNotation(g.lhs);
+  const cur = groupPrefixes.get(lhs);
+  // 显式名（非 true）优先；已经是显式名的不被 true 覆盖
+  if (g.group && g.group !== true) groupPrefixes.set(lhs, g.group);
+  else if (cur === undefined) groupPrefixes.set(lhs, g.group ?? null);
+}
+// 按前缀长度降序 —— 匹配时优先取最具体的那个
+const groupPrefixList = [...groupPrefixes.entries()]
+  .filter(([, name]) => name && name !== true)
+  .sort((a, b) => b[0].length - a[0].length);
 
-for (const r of raw) {
+/** 给一个键找它所属的 which-key 分组（最长前缀匹配） */
+function whichKeyGroup(vim) {
+  for (const [lhs, name] of groupPrefixList) {
+    // 必须比分组键更长，否则分组节点自己也算成员
+    if (vim !== lhs && vim.startsWith(lhs)) return name;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- 1. 展开全部键
+const all = [];
+/**
+ * 按 `(mode, lhs)` 去重。
+ *
+ * ⚠️ `nvim_get_keymap("v")` 里真的有两条一模一样的 `<C-S>`（实测），
+ * 不去重会让它自己成为自己的「次解」——
+ * 页面上会显示「`<C-S>`，次解：`<C-S>`」，看着像 bug。
+ */
+const seenKey = new Set();
+for (const r of src.keys) {
   const vim = toVimNotation(r.lhs);
-
-  // 只练 Normal / Visual / Operator-pending / Cmdline。
-  //
-  // 排除 Insert 的理由不是"不重要",而是**两个实测出来的问题**:
-  //   1. Insert 模式的 desc 可能是 help 引用(`<C-W>` → `:help i_CTRL-W-default`),
-  //      不是人话描述,当题干会误导
-  //   2. Insert 里按键大多是"打出这个字符",肌肉记忆是自动的,不需要练。
-  //      真正需要刻意记的是 Normal 模式那些多键序列。
-  if (r.mode === "i" || r.mode === "s") {
-    skipped.insert++;
-    continue;
-  }
-
-  // 无描述的:跳过。不练自己不知道干什么的键 = 制造错误肌肉记忆。
-  if (!r.desc || !r.desc.trim()) {
-    skipped.nodesc++;
-    continue;
-  }
-
-  // auto-pairs:实测 18 条,desc 形如 `Open action for "()" pair`。
-  // 这类是"打左括号自动配右括号",不是按键功能,而且 Insert 模式里
-  // 练它没意义(你不需要记 auto-pairs,手感自然就有)。全部排除。
-  if (/(action for|Closeopen)/.test(r.desc)) {
-    skipped.autopair++;
-    continue;
-  }
+  const desc = (r.desc || "").trim();
 
   // 明显不是用户接口的
-  if (/^<Plug>|<80>|^<F\d+>$|^\s*$/.test(vim)) {
-    skipped.weird++;
-    continue;
-  }
+  if (/^<Plug>|<80>|^<F\d+>$|^\s*$/.test(vim)) continue;
 
-  // desc 其实是 help 引用,不是人话描述。
-  // 实测踩到:`#` 键在 Visual 模式 desc 是 `:help v_#-default`,
-  // 当题干等于"按 help 引用里说的那个键" —— 毫无意义。
-  // 这类键本身是 Vim 内建且有用(# 是选计数词),但需要自己补描述,
-  // 不能直接把 help 串扔给用户。
-  if (/^:help\b/.test(r.desc.trim())) {
-    skipped.helpref++;
-    continue;
-  }
+  const dedupKey = `${r.mode}|${vim}`;
+  if (seenKey.has(dedupKey)) continue;
+  seenKey.add(dedupKey);
 
-  // 精确键名映射(不分 leader 子树)。分屏键必须走这里 ——
-  // 见 GROUPS 上面的说明:它们不匹配任何前缀规则。
-  const EXACT = {
-    "<Space>|": { key: "window", label: "窗口", level: 1 },
-    "<Space>-": { key: "window", label: "窗口", level: 1 },
-  };
+  // 分组以 which-key 的显式声明为准（见 groupPrefixes 的说明）
+  const wk = whichKeyGroup(vim);
+  const g = wk
+    ? { key: wk, label: GROUP_LABELS[wk] ?? wk }
+    : fallbackGroup(vim, r.mode);
 
-  const g =
-    EXACT[vim] ||
-    GROUPS.find((x) => vim.startsWith(x.prefix) && vim !== x.prefix) ||
-    classifyBare(vim) || { key: "other", label: "其他", level: 9 };
-
-  // : 命令行里的一堆 :s/.../... 变体,单独归一类,不进主关卡
-  const isExCommand = vim.startsWith(":") && vim.length > 6;
-
-  out.push({
-    id: `${r.mode}:${vim}`,
-    keys: null, // 运行时生成
+  all.push({
+    id: dedupKey,
     display: vim,
-    label: r.desc,
-    desc: r.desc,
+    label: desc,
+    desc,
     mode: r.mode,
     group: g.key,
     groupLabel: g.label,
-    level: isExCommand ? 11 : g.level,
+    /** which-key 的原始分组名（可能是 true = 自动推断）。留着便于回溯 */
+    wkGroup: r.group ?? null,
+    /** 是否在 which-key 分组树里 */
+    inWhichKey: Boolean(wk),
+    rhs: r.rhs || "",
+    /** rhs 为空 = Lua 回调，看不出等价于谁 */
+    lua: Boolean(r.lua),
     status: "mapped",
   });
 }
 
-out.sort((a, b) => a.level - b.level || a.display.localeCompare(b.display));
+// ------------------------------------------------- 2. 按「命令」聚合出解法
+/**
+ * 命令的身份。
+ *
+ * ## ⚠️ 为什么不带 mode
+ *
+ * 同一条命令在 n/v/x 各注册一条是**常态**，不是三件不同的事：
+ *
+ * ```
+ * j     n  rhs="v:count == 0 ? 'gj' : 'j'"  desc=Down
+ * j     v  rhs="v:count == 0 ? 'gj' : 'j'"  desc=Down
+ * j     x  rhs="v:count == 0 ? 'gj' : 'j'"  desc=Down
+ * ```
+ *
+ * 我第一版把 mode 算进身份，于是「Up」出了 3 道题、「Down」出了 3 道题 ——
+ * 练同一件事练三遍。去掉 mode 后它们合成一道，mode 记在 `modes` 里。
+ *
+ * ## 三种身份，可信度递减
+ *
+ * | 情况 | 身份 | 可信度 |
+ * |------|------|--------|
+ * | 有 rhs | `rhs\|<右值>` | **严格** —— rhs 相同就是同一条命令 |
+ * | Lua 回调且有 desc | `desc\|<描述>` | 弱 —— 同描述是同一功能（实测有效） |
+ * | Lua 回调且无 desc | `lhs\|<键>` | 只能当独立题目，不聚合 |
+ *
+ * 第三种必须单独处理：若也按 desc 聚合，**所有无描述的键会合并成一道题**。
+ */
+function commandKey(b) {
+  if (!b.lua && b.rhs.trim()) return { key: `rhs|${b.rhs}`, by: "rhs" };
+  if (b.desc) return { key: `desc|${b.desc}`, by: "desc" };
+  return { key: `lone|${b.id}`, by: "lone" };
+}
 
-// 生成 TS
-const ts = `// 自动生成,请勿手改。改法:改 data/raw-lazyvim.json 后重跑 scripts/build-dataset.mjs
+/**
+ * 选最优解。
+ *
+ * 判据（依次）：键数少 > 不用修饰键 > 不用 leader。
+ *
+ * 例：`L` / `]b` / `<Space>bb` 里选 `L`（1 键，无修饰，无 leader）。
+ * 这对应「我练的是最优解」—— 出题只考它，其余只做展示。
+ */
+function cost(b) {
+  const keys = b.keys.length;
+  const mods = b.keys.filter((k) => /^<(C|M|S)-/.test(k)).length;
+  const leader = b.keys[0] === "<Space>" ? 1 : 0;
+  return keys * 100 + mods * 10 + leader;
+}
+
+const byCommand = new Map();
+for (const b of all) {
+  b.keys = splitLhsLocal(b.display);
+  const { key, by } = commandKey(b);
+  if (!byCommand.has(key)) byCommand.set(key, { by, members: [] });
+  byCommand.get(key).members.push(b);
+}
+
+function splitLhsLocal(lhs) {
+  const out = [];
+  let i = 0;
+  while (i < lhs.length) {
+    if (lhs[i] === "<") {
+      const end = lhs.indexOf(">", i);
+      if (end > i) {
+        out.push(lhs.slice(i, end + 1));
+        i = end + 1;
+        continue;
+      }
+    }
+    out.push(lhs[i]);
+    i++;
+  }
+  return out;
+}
+
+// --------------------------------------------- 3. 原生 Ex 等价（人工核实过）
+/**
+ * ⚠️ 这张表**没法从数据算出来**。
+ *
+ * rhs 里是 `<Cmd>BufferLineCycleNext<CR>` 这种插件命令，跟 `:bnext` 的
+ * 对应关系需要人判断。所以沿用 lib/seq-solutions.ts 里那张
+ * **逐条 `exists(':命令')` 实测过**的表（73 条，全部通过）。
+ *
+ * 保留 `verified` 字段区分「我确认存在」和「没查到」——
+ * 不能把没核实的写成确定结论。
+ */
+const NATIVE_VERIFIED = {
+  "Go to Left Window": [":wincmd h", true],
+  "Go to Lower Window": [":wincmd j", true],
+  "Go to Upper Window": [":wincmd k", true],
+  "Go to Right Window": [":wincmd l", true],
+  "Split Window Below": [":split", true],
+  "Split Window Right": [":vsplit", true],
+  "Delete Window": [":close", true],
+  "Switch to Other Buffer": [":buffer #", true],
+  "Delete Buffer": [":bdelete", true],
+  "Delete Buffer and Window": [":bdelete", true],
+  "Delete Invisible Buffers": [":bdelete +bufhidden", true],
+  "Pick Buffer": [":buffers", true],
+  "Delete Buffers to the Left": [":bdelete 1,$", true],
+  "Delete Other Buffers": [":bdelete!", true],
+  "Delete Non-Pinned Buffers": [":bdelete +bufhidden", true],
+  "Delete Buffers to the Right": [":bdelete %,$", true],
+  Buffers: [":buffers", true],
+  "Buffers (all)": [":ls", true],
+  "Find Config File": [":edit $MYVIMRC", true],
+  "Find Files (Root Dir)": [":find", true],
+  "Find Files (cwd)": [":find .", true],
+  "New File": [":enew", true],
+  "Prev Buffer": [":bprevious", true],
+  "Next Buffer": [":bnext", true],
+  "Save File": [":write", true],
+  "Escape and Clear hlsearch": [":nohlsearch", true],
+  "Move Down": [":wincmd j", true],
+  "Move Up": [":wincmd k", true],
+  Registers: [":registers", true],
+  "Search History": [":history /", true],
+  Autocmds: [":autocmd", true],
+  "Command History": [":history", true],
+  Commands: [":command", true],
+  "Help Pages": [":help", true],
+  Jumps: [":jumps", true],
+  "Location List": [":lopen", true],
+  Marks: [":marks", true],
+  "Man Pages": [":Man", true],
+  "Quickfix List": [":copen", true],
+  "Search and Replace": [":substitute", true],
+  "Redraw / Clear hlsearch / Diff Update": [":redraw", true],
+  "Decrease Window Height": [":resize -1", true],
+  "Decrease Window Width": [":vertical resize -1", true],
+  "Increase Window Width": [":vertical resize +1", true],
+  "Increase Window Height": [":resize +1", true],
+  "Previous Tab": [":tabprevious", true],
+  "Next Tab": [":tabnext", true],
+  "New Tab": [":tabnew", true],
+  "Close Tab": [":tabclose", true],
+  "First Tab": [":tabfirst", true],
+  "Last Tab": [":tablast", true],
+  "Close Other Tabs": [":tabonly", true],
+  ":previous": [":previous", true],
+  ":rewind": [":rewind", true],
+  "Move buffer prev": [":bprevious", true],
+  "Prev Error": [":cprevious", true],
+  ":lprevious": [":lprevious", true],
+  ":lrewind": [":lrewind", true],
+  ":crewind": [":crewind", true],
+  ":trewind": [":trewind", true],
+  ":next": [":next", true],
+  ":last": [":last", true],
+  "Move buffer next": [":bnext", true],
+  "Next Error": [":cnext", true],
+  ":lnext": [":lnext", true],
+  ":llast": [":llast", true],
+  ":clast": [":clast", true],
+  ":tlast": [":tlast", true],
+  ":lpfile": [":lpfile", true],
+  ":cpfile": [":cpfile", true],
+  ":lnfile": [":lnfile", true],
+  ":cnfile": [":cnfile", true],
+  ":ptnext": [":ptnext", true],
+};
+
+/**
+ * 把命令聚合成「一道题」。
+ *
+ * best      最优解（出题只考它）
+ * alternates 次解 —— 实测等价，仅展示
+ * native     原生 Ex —— 仅展示
+ */
+const commands = [];
+for (const [, { by, members }] of byCommand) {
+  /**
+   * ⚠️ 先按**键本身**去重，再选最优解。
+   *
+   * 同一命令在 n/v/x 各注册一条是常态，所以 members 里同一个键会重复出现
+   * （`<Up>` 在 n/v/x 各一条）。不去重的话次解列表长成
+   * 「次解：`<Up>` `<Up>` `k` `k` `k`」—— 同一个键显示三遍。
+   *
+   * 去重时保留**第一个**出现的（members 的顺序来自数据源，稳定）。
+   */
+  const byDisplay = new Map();
+  for (const m of members) {
+    if (!byDisplay.has(m.display)) byDisplay.set(m.display, m);
+  }
+  const uniqMembers = [...byDisplay.values()];
+
+  const sorted = uniqMembers.sort(
+    (a, b) => cost(a) - cost(b) || a.display.localeCompare(b.display),
+  );
+  const best = sorted[0];
+  const alternates = sorted.slice(1);
+
+  const nv = NATIVE_VERIFIED[best.desc];
+  const isExDesc = best.desc.startsWith(":");
+  const native = nv ? nv[0] : isExDesc ? best.desc : null;
+  const nativeVerified = nv ? nv[1] : "unchecked";
+
+  commands.push({
+    id: best.id,
+    /** 最优解，出题考的就是它 */
+    display: best.display,
+    desc: best.desc,
+    /** 这条命令在哪些 mode 有效（同一命令常在 n/v/x 各注册一条） */
+    modes: [...new Set(members.map((m) => m.mode))].sort(),
+    group: best.group,
+    groupLabel: best.groupLabel,
+    /** 次解：实测同一条命令的其它键。仅展示，不出题 */
+    alternates: alternates.map((a) => a.display),
+    /** 等价判据的可信度：rhs = 严格，desc = 弱，lone = 没聚合 */
+    equivBy: by,
+    /** 原生 Ex 等价。null = 确认没有（插件功能） */
+    native,
+    nativeVerified,
+    /** 这道命令总共几个键能做 */
+    total: sorted.length,
+  });
+}
+
+commands.sort(
+  (a, b) =>
+    a.group.localeCompare(b.group) ||
+    a.display.length - b.display.length ||
+    a.display.localeCompare(b.display),
+);
+
+/**
+ * ⚠️ id 必须唯一 —— 它是进度存储的键。
+ *
+ * 聚合去掉了 mode 之后，`n|<Up>` 和 `v|<Up>` 会合成一条，但
+ * **不同命令仍可能撞 id**（同一 lhs 在不同 mode 是不同命令，
+ * 比如 `<C-S>` 在 n 是存盘、在 i 是别的）。
+ * 这里统一改成「命令身份」，保证一道题一个稳定 id。
+ */
+const seenId = new Map();
+for (const c of commands) {
+  const n = (seenId.get(c.id) ?? 0) + 1;
+  seenId.set(c.id, n);
+  if (n > 1) c.id = `${c.id}#${n}`;
+}
+
+// ------------------------------------------------------------- 4. 生成 TS
+const groupNames = [...new Set(all.map((b) => b.group))];
+const groupLabels = {};
+for (const b of all) groupLabels[b.group] = b.groupLabel;
+
+/**
+ * ⚠️ `RAW` 必须剥掉 `keys`。
+ *
+ * 聚合阶段为了算代价给每个对象挂了 `keys`（`splitLhs` 的结果），
+ * 但 `RAW` 的类型是 `Omit<Binding, "keys">` —— keys 是**运行时**由
+ * `splitLhs(display)` 生成的，写进数据集只会重复一份，还过不了类型检查。
+ * （踩过：368 条 TS2353，全是这个字段。）
+ */
+const rawOut = all.map(({ keys: _keys, ...rest }) => rest);
+
+const ts = `// 自动生成，请勿手改。
 //
-// 来源:${out.length} 条,从本机 LazyVim 会话的 nvim_get_keymap 实测抽取。
-// 全部 status="mapped"(键确实存在,含义取自插件 desc,未经逐条亲验)。
+// 生成：node scripts/build-dataset.mjs
+// 数据源：data/keymaps.json（由 scripts/dump-maps.lua 从本机 nvim 抽取）
 //
-// 跳过:${skipped.insert} 条 Insert/Select + ${skipped.autopair} 条 auto-pairs
-//     + ${skipped.helpref} 条 desc 是 help 引用 + ${skipped.nodesc} 条无描述
-//     + ${skipped.weird} 条非用户接口
+// ## 数据来源
+//
+// - **键位**：\`nvim_get_keymap\`，8 个 mode，${all.length} 条，**不做过滤**
+// - **分组**：which-key 的真实分组树（LazyVim 的 \`group = "..."\`），
+//   ${all.filter((b) => b.inWhichKey).length} 条落在分组里
+// - **rhs**：${all.filter((b) => !b.lua).length} 条有 rhs（可严格判定等价），
+//   ${all.filter((b) => b.lua).length} 条是 Lua 回调（只能按 desc 弱判定）
+//
+// ## ⚠️ 别再用「关卡」
+//
+// 旧版有 LEVEL_NAMES / level 字段，是手编的「第 x 关」，和真实分组无关。
+// 现在分组直接用 which-key 的，所以关卡概念整个删掉了。
 
 import type { Binding } from "./matcher";
 
-export const GROUPS: Record<string, string> = {
-${[...new Set(out.map((b) => b.group))]
-  .map((k) => `  ${JSON.stringify(k)}: ${JSON.stringify(out.find((b) => b.group === k).groupLabel)},`)
-  .join("\n")}
-};
+/** which-key 分组 → 中文名。名字来自 LazyVim 的 group 声明，不是自己编的 */
+export const GROUPS: Record<string, string> = ${JSON.stringify(groupLabels, null, 2)};
 
-export const LEVEL_NAMES: Record<number, string> = {
-${[...new Set(out.map((b) => b.level))]
-  .sort((a, b) => a - b)
-  .map((l) => `  ${l}: ${JSON.stringify(l === 1 ? "第 1 关 · 窗口(你的弱项)" : `第 ${l} 关`)},`)
-  .join("\n")}
-};
+/** 全部键位。一个键一行，含 mode 区分（同一 lhs 在 n/v 各有一条） */
+export const RAW: Omit<Binding, "keys">[] = ${JSON.stringify(rawOut, null, 1)};
 
-export const RAW: Omit<Binding, "keys">[] = ${JSON.stringify(
-  out.map(({ keys: _k, ...rest }) => rest),
-  null,
-  1,
-)};
+/**
+ * 按「命令」聚合后的题目。
+ *
+ * 一个命令一道题 —— 只考 \`display\`（最优解），
+ * \`alternates\` 和 \`native\` 仅作展示。所以题量不因多解而翻倍。
+ */
+export const COMMANDS: Command[] = ${JSON.stringify(commands, null, 1)};
+
+export type Command = {
+  id: string;
+  /** 最优解，出题只考它 */
+  display: string;
+  desc: string;
+  /** 这条命令在哪些 mode 有效（同一命令常在 n/v/x 各注册一条） */
+  modes: string[];
+  group: string;
+  groupLabel: string;
+  /** 次解：实测同一条命令的其它键。仅展示 */
+  alternates: string[];
+  /** 等价判据：rhs = 严格实测，desc = 弱（Lua 回调只能按描述归类），lone = 没聚合 */
+  equivBy: "rhs" | "desc" | "lone";
+  /** 原生 Ex 等价。null = 确认没有（插件功能） */
+  native: string | null;
+  /** 原生等价核实过没有 */
+  nativeVerified: true | "unchecked";
+  /** 这道命令总共有几个键能做 */
+  total: number;
+};
 `;
 
 writeFileSync(join(root, "lib/bindings.ts"), ts);
-console.log(`✅ 生成 ${out.length} 条,跳过 ${skipped.nodesc}(无描述)+${skipped.weird}(内部)`);
-console.log(`   关卡分布:`);
-const byLevel = {};
-for (const b of out) byLevel[b.level] = (byLevel[b.level] || 0) + 1;
-for (const l of Object.keys(byLevel).sort((a, b) => a - b)) {
-  console.log(`     L${l}: ${byLevel[l]} 条`);
+
+// ---------------------------------------------------------------- 报告
+const multi = commands.filter((c) => c.total > 1);
+const withNative = commands.filter((c) => c.native);
+console.log(`✅ ${all.length} 个键 → ${commands.length} 道题（按命令聚合）`);
+console.log(`   多解：${multi.length} 道（${multi.reduce((a, c) => a + c.total - 1, 0)} 个次解，仅展示）`);
+console.log(`   原生 Ex：${withNative.length} 道有，其中 ${withNative.filter((c) => c.nativeVerified === true).length} 条实测核实`);
+console.log(`   分组：${groupNames.length} 个`);
+const byGroup = {};
+for (const c of commands) byGroup[c.group] = (byGroup[c.group] || 0) + 1;
+for (const [g, n] of Object.entries(byGroup).sort((a, b) => b[1] - a[1])) {
+  console.log(`     ${(groupLabels[g] || g).padEnd(16)} ${n}`);
 }

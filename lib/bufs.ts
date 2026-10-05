@@ -214,9 +214,10 @@ export type BufTask = {
  * 页面会毫无反应(这个坑在窗口那页已经踩过两次)。
  */
 export const BUF_TASKS: BufTask[] = [
-  // ⚠️ key 用的是 SOLUTIONS 的主键,不是「最常见的那个键」。
-  // 因为「下一个 buffer」有四条解法(L / ]b / <Space>bb / <Space>b`)，
+  // ⚠️ key 用的是「命令组的主键」，不是「最常见的那个键」。
+  // 因为「下一个 buffer」实测有两条真等价键（L / ]b，rhs 相同），
   // 题干要展示的是**这一组**，所以 key 统一用组名 L。
+  // （解法现在从 COMMANDS 取，见 app/buffers/drill.tsx 的 commandFor）
   { key: "L", desc: "切到下一个 buffer", start: ["a.lua", "b.lua", "c.lua"], curIndex: 0 },
   { key: "L", desc: "从末尾切回第一个(会绕回)", start: ["a.lua", "b.lua", "c.lua"], curIndex: 2 },
 
@@ -269,64 +270,34 @@ export function applyBufKey(key: string, s: BufState): BufState | null {
 }
 
 /**
- * 所有解法 —— 同一件事在本机有多个键时全列出来。
+ * ## 解法表已删除（原来这里有个手写的 `SOLUTIONS`）
  *
- * 数据来自按 **rhs 聚合** `nvim_get_keymap("n")`:rhs 相同的映射
- * 底层执行的是同一条命令,就是真同义键。所以这份表不是猜的,
- * 是「同一行rhs 下出现过的所有 lhs」。
+ * 那张表声称 `L` 的等价解是 `L` / `]b` / `<Space>bb` / `<Space>b\``，
+ * 但按 rhs 实测：
  *
- * 例:BufferLineCycleNext 这一行下面有 `L` 和 `]b`,
- * 而 `<Space>bb` / `<Space>b\`` 走的是 `:e #`(换个写法但同一件事)。
+ * | rhs | 真实等价键 |
+ * |-----|-----------|
+ * | `<Cmd>BufferLineCycleNext<CR>` | `L` `]b` |
+ * | `<Cmd>e #<CR>` | `` ` `` `<Space>bb` |
  *
- * ## native 字段
+ * **`<Space>bb` 和 `L` 不是同一条命令** —— 前者是 `:e #`（交替缓冲区），
+ * 后者是 bufferline 的下一个。手写表把它们混成一组，
+ * 于是「按了 `<Space>bb` 却判成答错 L 的题」这种 bug 有了温床。
  *
- * Vim 原生的 Ex 命令。**逐条在真 nvim 里 feedkeys 验过**(`:bn` 切下一个、
- * `:bp` 切上一个、`:bd` 删当前、`:bd %` 全删、`:bfirst` / `:blast` 首尾、
- * `:buffers` 列出)。原生命令没绑到任何键上,得手打 `:`,
- * 所以它是**参考**不是解法 —— 训练器不收它,否则会逼你手打冒号。
+ * 同时手写表**漏了** `j`/`<Down>`、`k`/`<Up>` 这两组真等价键。
+ *
+ * 解法现在统一来自 `lib/bindings.ts` 的 `COMMANDS`（build 阶段按 rhs 聚合），
+ * 见 `app/buffers/drill.tsx` 的 `commandFor()`。
+ *
+ * ## native 侧的实测发现（人工验证的，不在数据里）
+ *
+ * 逐条在真 nvim 里 feedkeys 验过：`:bn` 切下一个、`:bp` 切上一个、
+ * `:bd` 删当前、`:bd %` 全删、`:bfirst` / `:blast` 首尾、`:buffers` 列出。
+ * 原生命令没绑到任何键上，得手打 `:`，所以它是**参考**不是解法 ——
+ * 训练器不收它，否则会逼你手打冒号。
  */
-export const SOLUTIONS: Record<string, { seqs: string[][]; native?: string; note?: string }> = {
-  // ---- 切换 ----
-  L: {
-    seqs: [["L"], ["]", "b"], ["<Space>", "b", "b"], ["<Space>", "b", "`"]],
-    native: ":bn  /  :bnext",
-    note: "四条都是「下一个 buffer」。裸 L 最省事(单键)",
-  },
-  H: {
-    seqs: [["H"], ["[", "b"], ["<Space>", "b", "`"]],
-    native: ":bp  /  :bprevious",
-    note: "「上一个 buffer」。⚠ 裸 H 和 <C-H> 不是一回事 —— 那个跳窗口",
-  },
-  "]B": { seqs: [["]", "B"]], native: "(无对应 Ex 命令)", note: "挪**位置**,不是切换;当前还是当前。到边界不动" },
-  "[B": { seqs: [["[", "B"]], native: "(无对应 Ex 命令)", note: "挪**位置**,不是切换" },
-
-  // ---- 删除 ----
-  bd: { seqs: [["<Space>", "b", "d"]], native: ":bd  /  :bdelete" },
-  bD: { seqs: [["<Space>", "b", "D"]], native: ":bd +closewindow", note: "连所在窗口一起关" },
-  bl: { seqs: [["<Space>", "b", "l"]], native: ":%bd {左边界}", note: "删当前 buffer 左边的全部" },
-  br: { seqs: [["<Space>", "b", "r"]], native: ":%bd {右边界}", note: "删当前 buffer 右边的全部" },
-  bo: { seqs: [["<Space>", "b", "o"]], native: ":bd 只是当前的" , note: "只留当前,其余全删" },
-  bi: { seqs: [["<Space>", "b", "i"]], native: ":%bd {不可见的}", note: "清掉没显示在任何窗口里的" },
-  bP: { seqs: [["<Space>", "b", "P"]], native: ":bd! {未固定的}", note: "删掉没被 pin 的" },
-
-  // ---- 標記 / 选择器 ----
-  bp: { seqs: [["<Space>", "b", "p"]], native: "(无 Ex 等价)", note: "标记/取消标记,固定后 bP 不删它" },
-  bj: {
-    seqs: [["<Space>", "b", "j"], ["<Space>", "f", "b"], ["<Space>", ","]],
-    native: ":buffers  /  :ls",
-    note: "三个键都弹buffer 选择器",
-  },
-  sb: { seqs: [["<Space>", "s", "b"]], native: "(无 Ex 等价)", note: "打开 buffer line UI(自己那套)" },
-};
 
 /** 把一个 Vim 记法序列归一化成可比对的字符串,如 ["L"] → "L" */
 export function normSeq(seq: string[]): string {
   return seq.join("|");
-}
-
-/** 这个操作的全部解法(归一化后的集合),用于判分 */
-export function solutionsOf(opKey: string): Set<string> {
-  const s = SOLUTIONS[opKey];
-  if (!s) return new Set();
-  return new Set(s.seqs.map(normSeq));
 }

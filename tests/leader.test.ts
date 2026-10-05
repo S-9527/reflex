@@ -54,17 +54,31 @@ describe("shouldTake —— 续键必须收(实测踩过的真 bug)", () => {
     expect(missed).toEqual([]);
   });
 
-  it("修复前会漏 206 条 —— 留个计数对照,防止回归", () => {
-    // 反向验证:如果判据退回"只看 firstKeySet",会漏多少
-    let count = 0;
+  /**
+   * 反向验证：如果判据退回「只看 firstKeySet」，会漏掉多少条。
+   *
+   * ⚠️ 断言用**比例**不用绝对数 —— 数据集会变（旧版 290 条，
+   * 现在全量 368 条），绝对数一改数据就得跟着改，那是假护栏。
+   * 真正要守住的性质是「漏掉的是**大多数**多键序列」。
+   */
+  it("修复前会漏掉大多数多键序列 —— 留个比例对照,防止回归", () => {
+    let missedCount = 0;
+    let multiKey = 0;
     for (const b of BINDINGS) {
-      let st = idle;
+      if (b.keys.length < 2) continue;
+      multiKey++;
       for (let i = 0; i < b.keys.length; i++) {
-        if (!FIRST.has(b.keys[i])) { count++; break; }
-        st = push(st, b.keys[i], { isTerminal: i === b.keys.length - 1, extendable: i !== b.keys.length - 1 });
+        if (!FIRST.has(b.keys[i])) {
+          missedCount++;
+          break;
+        }
       }
     }
-    expect(count).toBeGreaterThan(200);
+    expect(multiKey, "数据集里没有多键序列？抽取可能坏了").toBeGreaterThan(50);
+    expect(
+      missedCount / multiKey,
+      `只看 firstKeySet 漏了 ${missedCount}/${multiKey} 条多键序列`,
+    ).toBeGreaterThan(0.5);
   });
 });
 

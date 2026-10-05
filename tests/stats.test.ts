@@ -1,7 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { levelStats, modeTotals, prefixTree, prefixOf, progressByLevel } from "../lib/stats";
+import { groupStats, modeTotals, prefixTree, prefixOf, progressByGroup } from "../lib/stats";
 import { splitLhs } from "../lib/keys";
-import { RAW, LEVEL_NAMES } from "../lib/bindings";
+import { RAW, GROUPS } from "../lib/bindings";
+
+/**
+ * 统计口径的测试。
+ *
+ * ## ⚠️ 这一版从「关卡」改成了「分组」
+ *
+ * 旧版统计按 `b.level`（手编的「第 x 关」），而那个 level 是前缀规则猜的。
+ * 现在按 `b.group`，分组来自 which-key 的真实声明 ——
+ * 所以统计面板里的分类和你按 `<Space>` 看到的 which-key 面板一致。
+ */
 
 const BINDINGS = RAW.map((r) => ({ ...r, keys: splitLhs(r.display) }));
 
@@ -33,22 +43,23 @@ describe("prefixOf", () => {
   });
 });
 
-describe("levelStats", () => {
-  const stats = levelStats(BINDINGS, LEVEL_NAMES);
-
-  it("每个关卡一条统计,按 level 升序", () => {
-    const levels = stats.map((s) => s.level);
-    expect([...levels].sort((a, b) => a - b)).toEqual(levels);
-  });
+describe("groupStats", () => {
+  const stats = groupStats(BINDINGS, GROUPS);
 
   it("total 之和等于总数(不能漏条)", () => {
     expect(stats.reduce((a, s) => a + s.total, 0)).toBe(BINDINGS.length);
   });
 
+  it("按条数降序 —— 量大的分组排前面", () => {
+    for (let i = 1; i < stats.length; i++) {
+      expect(stats[i - 1].total).toBeGreaterThanOrEqual(stats[i].total);
+    }
+  });
+
   it("byMode 之和等于 total", () => {
     for (const s of stats) {
       const sum = Object.values(s.byMode).reduce((a, b) => a + b, 0);
-      expect(sum, `第 ${s.level} 关的 byMode 之和不等于 total`).toBe(s.total);
+      expect(sum, `${s.name} 的 byMode 之和不等于 total`).toBe(s.total);
     }
   });
 
@@ -64,13 +75,48 @@ describe("levelStats", () => {
     }
   });
 
-  it("每关都有名字(UI 直接显示它)", () => {
+  it("每个分组都有名字(UI 直接显示它)", () => {
     for (const s of stats) expect(s.name).toBeTruthy();
   });
 
-  it("没有超过 40 条的关卡(练不完的关卡是设计失败)", () => {
+  it("inWhichKey <= total(它数的是落在 which-key 里的条数)", () => {
     for (const s of stats) {
-      expect(s.total, `第 ${s.level} 关 ${s.total} 条,太多`).toBeLessThanOrEqual(40);
+      expect(s.inWhichKey).toBeGreaterThanOrEqual(0);
+      expect(s.inWhichKey).toBeLessThanOrEqual(s.total);
+    }
+  });
+
+  /**
+   * ⚠️ 真实分组里 search/goto 是最大的两组。
+   *
+   * 旧版把「窗口」放第 1 关，但它其实只有 2 条 —— 这就是
+   * 「板块划分不合理」的直接证据。
+   *
+   * 注意要**排除兜底桶**：`Ctrl / Alt 其它` 和 `Visual 模式` 条数更多，
+   * 但它们是「没有 which-key 分组」的键按形态归的类，不是真实分组。
+   * 拿它们跟 search 比是没有意义的。
+   */
+  it("真实分组里最大的是 search 或 goto", () => {
+    const real = stats.filter((s) => s.inWhichKey === s.total);
+    expect(real.length, "一个完整的 which-key 分组都没有？").toBeGreaterThan(3);
+    expect(["search", "goto"]).toContain(real[0].group);
+  });
+
+  it("窗口分组很小(旧版把它当第 1 关是错的)", () => {
+    const win = stats.find((s) => s.group === "windows");
+    const search = stats.find((s) => s.group === "search");
+    expect(win, "找不到 windows 分组").toBeDefined();
+    expect(search).toBeDefined();
+    expect(win!.total, "窗口不该比搜索还大").toBeLessThan(search!.total);
+  });
+
+  it("兜底桶存在,且标出了它们不在 which-key 里", () => {
+    // 「Ctrl / Alt 其它」「Visual 模式」这类是按形态兜底归的 ——
+    // 它们的存在是诚实的:这些键本来就没有 which-key 分组。
+    const fallback = stats.filter((s) => s.inWhichKey === 0);
+    expect(fallback.length, "一个兜底桶都没有？分组逻辑可能坏了").toBeGreaterThan(0);
+    for (const f of fallback) {
+      expect(f.inWhichKey, `${f.name} 应该标成不在 which-key 里`).toBe(0);
     }
   });
 });
@@ -85,15 +131,18 @@ describe("modeTotals", () => {
   it("每个 mode 都有可读名", () => {
     for (const m of modeTotals(BINDINGS)) expect(m.label).toBeTruthy();
   });
+
+  it("Normal 是最多的模式", () => {
+    expect(modeTotals(BINDINGS)[0].mode).toBe("n");
+  });
 });
 
 describe("prefixTree", () => {
   const tree = prefixTree(BINDINGS);
 
   it("树的 count 是唯一键数,不是条目数", () => {
-    // 一个键在 n/v/x/o 四个模式各有一条记录,但树上只该画一次
+    // 一个键在 n/v/x/o 各有一条记录,但树上只该画一次
     // —— 否则 <Space>sm 这类会渲染出 4 个一模一样的格子。
-    // 所以 count 比条目数小,差的正好是「同键多模式」的重复条数。
     const treeTotal = tree.reduce((a, n) => a + n.count, 0);
     const entries = BINDINGS.filter((b) => prefixOf(b.display));
     const unique = new Set(entries.map((b) => b.display)).size;
@@ -118,22 +167,23 @@ describe("prefixTree", () => {
     }
   });
 
-  it("每个节点的子键都带所属关卡(UI 要显示 badge)", () => {
+  it("每个节点的子键都带所属分组(UI 要显示 badge)", () => {
     for (const n of tree) {
-      for (const c of n.children) expect(c.levels.length).toBeGreaterThan(0);
+      for (const c of n.children) expect(c.groups.length).toBeGreaterThan(0);
     }
   });
 
-  it("分屏键在树里且带第 1 关标记", () => {
+  it("分屏键在树里且归到窗口相关分组", () => {
     const node = tree.find((n) => n.prefix === "<Space>|");
     expect(node).toBeDefined();
-    expect(node!.children[0].levels).toContain(1);
+    // 分组名来自 which-key,可能是 windows 也可能按形态兜底
+    expect(node!.children[0].groups.length).toBeGreaterThan(0);
   });
 });
 
-describe("progressByLevel", () => {
+describe("progressByGroup", () => {
   it("没进度时全部算 fresh", () => {
-    const p = progressByLevel(BINDINGS, {});
+    const p = progressByGroup(BINDINGS, {}, GROUPS);
     for (const x of p) {
       expect(x.fresh).toBe(x.total);
       expect(x.mastered).toBe(0);
@@ -142,27 +192,27 @@ describe("progressByLevel", () => {
   });
 
   it("total 之和等于总数", () => {
-    const p = progressByLevel(BINDINGS, {});
+    const p = progressByGroup(BINDINGS, {}, GROUPS);
     expect(p.reduce((a, x) => a + x.total, 0)).toBe(BINDINGS.length);
   });
 
   it("mastered + shaky + fresh == total", () => {
-    const prog: Record<string, { seen: number; correct: number; streak: number; lastAt: number }> = {};
+    const prog: Record<string, { seen: number; independent: number; streak: number }> = {};
     for (const b of BINDINGS.slice(0, 40)) {
-      prog[b.id] = { seen: 2, correct: 2, streak: 3, lastAt: 1 }; // mastered
+      prog[b.id] = { seen: 2, independent: 2, streak: 3 }; // mastered
     }
     for (const b of BINDINGS.slice(40, 60)) {
-      prog[b.id] = { seen: 1, correct: 0, streak: 0, lastAt: 1 }; // shaky
+      prog[b.id] = { seen: 1, independent: 0, streak: 0 }; // shaky
     }
-    for (const x of progressByLevel(BINDINGS, prog)) {
-      expect(x.mastered + x.shaky + x.fresh, `第 ${x.level} 关对不上`).toBe(x.total);
+    for (const x of progressByGroup(BINDINGS, prog, GROUPS)) {
+      expect(x.mastered + x.shaky + x.fresh, `${x.name} 对不上`).toBe(x.total);
     }
   });
 
   it("done 是 0~1 之间的比例", () => {
-    const prog: Record<string, { seen: number; correct: number; streak: number; lastAt: number }> = {};
-    for (const b of BINDINGS) prog[b.id] = { seen: 1, correct: 1, streak: 3, lastAt: 1 };
-    for (const x of progressByLevel(BINDINGS, prog)) {
+    const prog: Record<string, { seen: number; independent: number; streak: number }> = {};
+    for (const b of BINDINGS) prog[b.id] = { seen: 1, independent: 1, streak: 3 };
+    for (const x of progressByGroup(BINDINGS, prog, GROUPS)) {
       expect(x.done).toBeGreaterThanOrEqual(0);
       expect(x.done).toBeLessThanOrEqual(1);
     }

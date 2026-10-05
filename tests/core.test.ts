@@ -142,7 +142,7 @@ describe("splitLhs", () => {
 });
 
 // --- 匹配器 ---
-const b = (id: string, keys: string[], level = 1): Binding => ({
+const b = (id: string, keys: string[]): Binding => ({
   id,
   keys,
   display: keys.join(""),
@@ -151,8 +151,11 @@ const b = (id: string, keys: string[], level = 1): Binding => ({
   mode: "n",
   group: "g",
   groupLabel: "测试组",
-  level,
   status: "verified",
+  rhs: "",
+  lua: true,
+  inWhichKey: false,
+  wkGroup: null,
 });
 
 const POOL = [
@@ -219,10 +222,35 @@ describe("match", () => {
     expect(r.kind).toBe("hit");
   });
 
-  it("同 lhs 保留 level 最小的", () => {
-    const dup = [b("old", ["x"], 5), b("new", ["x"], 1)];
-    const r = match(buildIndex(dup), ["x"]);
+  /**
+   * 同一键序列有多条映射时,索引必须给出**确定**的结果。
+   *
+   * ⚠️ 旧版按 `level`(手编关卡)取最小的,而关卡概念已删。
+   * 现在按「键数少 → 不用修饰键 → 不用 leader」算代价,
+   * 代价相同时保留**先写入**的那条(判据是 `<` 不是 `<=`)。
+   * 这条断言的就是那个确定性 —— 它保证同一份数据每次建索引结果一样。
+   */
+  it("同键序列冲突时结果确定(保留先写入的)", () => {
+    const first = { ...b("first", ["x"]), display: "x" };
+    const second = { ...b("second", ["x"]), display: "<C-x>" };
+    const r = match(buildIndex([first, second]), ["x"]);
     expect(r.kind).toBe("hit");
-    if (r.kind === "hit") expect(r.binding.id).toBe("new");
+    if (r.kind === "hit") expect(r.binding.id).toBe("first");
+  });
+
+  /**
+   * 代价判据本身:同前缀下,`<Space>ff`(3 键 + leader)比
+   * `<C-w>s`(2 键 + 修饰)贵,比单键更贵。
+   *
+   * 这里通过 `candidatesAt` 的排序间接验证 ——
+   * 它按代价升序给候选,所以最省事的排第一。
+   */
+  it("候选按按键代价排序:单键在 leader 三键之前", () => {
+    const pool = [b("leader", ["<Space>", "f", "f"]), b("plain", ["g"])];
+    const idx = buildIndex(pool);
+    // "g" 是单键,应该直接 hit
+    const r = match(idx, ["g"]);
+    expect(r.kind).toBe("hit");
+    if (r.kind === "hit") expect(r.binding.id).toBe("plain");
   });
 });

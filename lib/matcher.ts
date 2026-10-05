@@ -25,8 +25,23 @@ export type Binding = {
   group: string;
   /** group 的中文名。UI 显示用 */
   groupLabel: string;
-  level: number;
   status: "verified" | "mapped" | "unknown";
+  /**
+   * 右值。`<Cmd>BufferLineCycleNext<CR>` 这种。
+   *
+   * ⚠️ 这是判定「两条映射是不是同一条命令」的**唯一严格依据**。
+   *   空字符串表示 Lua 回调(rhs=nil),看不出等价于谁 —— 见 `lua`。
+   *
+   * 旧数据集抽了 rhs 却在写 JSON 时丢掉,导致等价解只能按 `desc` 猜,
+   * 于是出现「<Space>bb 被当成 L 的等价解」这种错。
+   */
+  rhs: string;
+  /** rhs 为空 = Lua 回调。这类键有动作但看不出是什么,不能假装知道它等价于谁 */
+  lua: boolean;
+  /** 是否落在 which-key 的分组树里(而非我们按形态兜底归的类) */
+  inWhichKey: boolean;
+  /** which-key 的原始分组名。`true` = 插件自动推断的,不是显式声明 */
+  wkGroup: string | true | null;
   /** 英文原文。中文翻译后仍保留,便于对照上游 */
   descEn?: string;
   /** 易混项 / 坑 */
@@ -54,7 +69,12 @@ export type MatchResult =
   | { kind: "miss"; typed: string[]; hint: Binding[]; expected: Binding[] };
 
 /**
- * 建索引。同一个 lhs 有多个绑定时,取 level 最小的(学习顺序靠前的优先)。
+ * 建索引。同一个 lhs 有多个绑定时,取**代价最小**的。
+ *
+ * ⚠️ 原来按 `level`(手编关卡)取最小的,而关卡概念已删。
+ * 现在按「键数少 → 不用修饰键 → 不用 leader」取 ——
+ * 这和 build-dataset.mjs 选最优解用的是同一套判据,
+ * 保证匹配器命中的和页面展示的是同一个键。
  */
 export function buildIndex(bindings: Binding[]): Node {
   const root = newNode();
@@ -69,9 +89,17 @@ export function buildIndex(bindings: Binding[]): Node {
       node = next;
     }
     const cur = node.terminal;
-    if (!cur || b.level < cur.level) node.terminal = b;
+    if (!cur || keyCost(b) < keyCost(cur)) node.terminal = b;
   }
   return root;
+}
+
+/** 一个绑定的「按键代价」——越小越优先。和 build-dataset.mjs 的 cost() 同源 */
+function keyCost(b: Binding): number {
+  const keys = b.keys.length;
+  const mods = b.keys.filter((k) => /^<(C|M|S)-/.test(k)).length;
+  const leader = b.keys[0] === "<Space>" ? 1 : 0;
+  return keys * 100 + mods * 10 + leader;
 }
 
 /**
@@ -123,12 +151,12 @@ function walk(n: Node, out: Binding[]) {
   for (const c of n.children.values()) walk(c, out);
 }
 
-/** 走到 typed 最后一个键之后,还有哪些候选(按 level 排序,取前 8) */
+/** 走到 typed 最后一个键之后,还有哪些候选(按键代价排序,取前 8) */
 function candidatesAt(root: Node, typed: string[], pool: Binding[]): Binding[] {
   const out: Binding[] = [];
   walk(root, out);
   const set = new Set(out.map((b) => b.id));
-  return pool.filter((b) => set.has(b.id)).sort((a, b) => a.level - b.level).slice(0, 8);
+  return pool.filter((b) => set.has(b.id)).sort((a, b) => keyCost(a) - keyCost(b)).slice(0, 8);
 }
 
 /** 池子里最长公共前缀最接近 typed 的绑定 —— 猜"你想按的可能是这个" */
@@ -143,7 +171,7 @@ function nearest(typed: string[], pool: Binding[]): Binding[] {
       return { b, common };
     })
     .filter((x) => x.common > 0)
-    .sort((a, b) => b.common - a.common || a.b.level - b.b.level)
+    .sort((a, b) => b.common - a.common || keyCost(a.b) - keyCost(b.b))
     .slice(0, 3)
     .map((x) => x.b);
 }

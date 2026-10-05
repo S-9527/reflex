@@ -24,7 +24,18 @@ import {
 import { WIN_KEYS, findKey, GROUPS, TASKS, type Task } from "@/lib/winkeys";
 import type { DrillTask } from "@/lib/drill";
 import { NO_EFFECT, useDrill } from "@/lib/use-drill";
-import { FlashLine, KeyLog, PendingHint, Provenance, TaskBar, TaskBox } from "@/lib/drill-ui";
+import {
+  DrillFlow,
+  FlashLine,
+  KeyLog,
+  KeySequence,
+  PendingHint,
+  Provenance,
+  TaskBar,
+  TaskBox,
+  streakOf,
+} from "@/lib/drill-ui";
+import { formatMs } from "@/lib/session";
 
 /**
  * 窗口键位训练 —— 只练 LazyVim 的 `<Space>wX`,原生写法只作对照展示。
@@ -247,7 +258,6 @@ export default function HydraDrill() {
     extraAccept: PANEL,
     onOther,
     // 延迟给够看反馈:判对后立刻翻页重置会让人看不出那下生效没有
-    advanceMs: 1600,
     noEffectText: (seq) => `${seq.join("")} 按了但布局没变(当前布局下这个键无效)`,
     onResetExtra: () => {
       zoomedRef.current = null;
@@ -259,11 +269,27 @@ export default function HydraDrill() {
   const pos = positions(d.state.layout.root);
 
   return (
-    <div className="space-y-4">
+    <DrillFlow
+      cursor={d.taskIndex}
+      total={d.session.queue.length}
+      accuracy={d.summary.accuracy}
+      keysPerMin={d.summary.keysPerMin}
+      streak={streakOf(d.session.results)}
+      done={d.done}
+      summary={d.summary}
+      formatMs={formatMs}
+      descOf={(id) => DRILL_TASKS.find((t) => t.id === id)?.desc ?? id}
+      onRetry={() => d.restart()}
+      onRetryMistakes={() => d.restart(d.session.results.filter((r) => !r.ok).map((r) => r.taskId))}
+      mode={d.mode}
+      onMode={d.setMode}
+      hint={d.hint}
+      canHint={d.canHint}
+      onHint={d.showHint}
+    >
       <TaskBar
         tasks={DRILL_TASKS}
-        current={d.taskIndex}
-        solved={d.solved}
+        current={DRILL_TASKS.findIndex((t) => t.id === d.task.id)}
         solvedAll={d.solvedAll}
         onClear={d.clearProgress}
         onPick={d.setTaskIndex}
@@ -274,9 +300,18 @@ export default function HydraDrill() {
       <TaskBox>
         <div className="flex flex-wrap items-baseline gap-2">
           <span className="text-neutral-300">按出</span>
-          <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{task.key}</kbd>
           <span className="text-neutral-400">{task.desc}</span>
         </div>
+
+        {/*
+          ⚠️ 旧版这里直接写出 `task.key`（= 面板键，也就是答案）。
+          改成逐键上色：`<Space>` `w` `X` 三个格子，按对一个绿一个。
+          这样仍然保留了「这一页要按三键」的信息，但不给答案。
+        */}
+        <div className="mt-3">
+          <KeySequence keys={d.shownKeys} feed={d.keyFeed} />
+        </div>
+
         {wk && (
           <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px]">
             <div className="flex items-baseline gap-2">
@@ -323,7 +358,7 @@ export default function HydraDrill() {
       <FlashLine flash={d.flash} />
 
       <KeyTable highlight={task.key} />
-    </div>
+    </DrillFlow>
   );
 }
 

@@ -10,8 +10,8 @@ import { SPEC } from "@/lib/textobj";
 import { UI_TOGGLES } from "@/lib/ui-toggles";
 import { DIAG_KEYS } from "@/lib/diagnostics";
 import { RAW } from "@/lib/bindings";
-import { loadBoards, boardSummary, clearBoard, saveBoards, type BoardProgress } from "@/lib/board-progress";
-import { load as loadSeq, reset as resetSeq, summarize, type Progress } from "@/lib/progress";
+import { BOARDS as BOARD_DEFS } from "@/lib/boards";
+import * as SRS from "@/lib/srs";
 
 /**
  * 首页 = 导航仪表盘。
@@ -32,126 +32,63 @@ import { load as loadSeq, reset as resetSeq, summarize, type Progress } from "@/
  * 所以 `s*` / `g*` / `f*` 这些留在 `/seq` 盲练,不做可视化。
  */
 
-type Board = {
-  id: string;
-  href: string;
-  name: string;
-  /**
-   * 练的是什么东西。
-   *
-   * ⚠️ 这里**绝不能**塞 HTML 再 dangerouslySetInnerHTML —— 我第一版那么写了,
-   * 结果 `<Space>w` 被当成标签解析掉,页面上显示成「w 面板」,
-   * 键位写法整个丢了。要强调键就写成 JSX。
-   */
-  what: React.ReactNode;
-  /** 题库条数 */
-  total: number;
-  /** 进度存哪:可视化板块用 boardId,盲背用 seq */
-  kind: "board" | "seq";
-};
 
 const K = ({ children }: { children: React.ReactNode }) => (
   <code className="rounded bg-blue-950 px-1 text-[10px] text-blue-300">{children}</code>
 );
 
-const BOARDS: Board[] = [
-  {
-    id: "windows-hydra",
-    href: "/windows",
-    name: "窗口",
-    what: (
-      <>
-        分屏、切分、缩放、跳焦点。这一族练的是 <K>&lt;Space&gt;w</K> 面板里的反射
-      </>
-    ),
-    total: WIN_TASKS.length,
-    kind: "board",
-  },
-  {
-    id: "buffers",
-    href: "/buffers",
-    name: "缓冲区",
-    what: (
-      <>
-        buffer 带子上的删/移/标,<K>&lt;Space&gt;b</K> 那一族
-      </>
-    ),
-    total: BUF_TASKS.length,
-    kind: "board",
-  },
-  {
-    id: "tabs",
-    href: "/tabs",
-    name: "标签页",
-    what: (
-      <>
-        <K>&lt;Tab&gt;</K> 那一族。注意它关的是<b className="text-amber-500/90">整个标签页</b>,
-        不是单个 buffer
-      </>
-    ),
-    total: TAB_TASKS.length,
-    kind: "board",
-  },
-  {
-    id: "files",
-    href: "/files",
-    name: "文件浏览器",
-    what: <>只记一条规律:<b className="text-blue-300">小写 = 项目根目录</b>,大写 = 当前目录</>,
-    total: FILE_TASKS.length,
-    kind: "board",
-  },
-  {
-    id: "text",
-    href: "/text",
-    name: "文本对象",
-    what: (
-      <>
-        <K>diw</K> <K>daw</K> <K>ip</K> <K>i(</K> …。核心是 inner 带不带边缘空白
-      </>
-    ),
-    total: SPEC.filter((s) => s.measured).length,
-    kind: "board",
-  },
-  {
-    id: "ui",
-    href: "/ui",
-    name: "界面开关",
-    what: (
-      <>
-        <K>&lt;Space&gt;u</K> 那一族,24 条。记号大小写很密(
-        <K>uL</K> <K>ul</K> <K>ug</K> <K>uz</K> <K>uZ</K> <K>uA</K> …),
-        边按边看画面怎么变
-      </>
-    ),
-    total: UI_TOGGLES.length,
-    kind: "board",
-  },
-  {
-    id: "diagnostics",
-    href: "/diag",
-    name: "诊断与 LSP",
-    what: (
-      <>
-        <K>[d</K> <K>]d</K> <K>[D</K> <K>]D</K> 让光标在诊断间移动,加上{" "}
-        <K>gr*</K> 六个 LSP 查询。⚠️ <K>gd</K> 是 Git diff,不是跳定义
-      </>
-    ),
-    total: DIAG_KEYS.length,
-    kind: "board",
-  },
-  {
-    id: "seq",
-    href: "/seq",
-    name: "全键位扫描",
-    what: (
-      <>
-        其余全部键位按序列<b>盲背</b>。按下去只弹面板、没有画面可看的那种,形式上盲背恰好是对的
-      </>
-    ),
-    total: RAW.length,
-    kind: "seq",
-  },
-];
+
+/**
+ * 首页的「在练什么」文案。
+ *
+ * ⚠️ 板块清单本身来自 `lib/boards.ts`（和 `/stats` 共用一份），
+ *    这里只补上首页要用的 JSX 强调 —— 纯文案，不含任何分类逻辑。
+ */
+const WHAT: Record<string, React.ReactNode> = {
+  "windows-hydra": (
+    <>
+      分屏、切分、缩放、跳焦点。这一族练的是 <K>&lt;Space&gt;w</K> 面板里的反射
+    </>
+  ),
+  buffers: (
+    <>
+      buffer 带子上的删/移/标，<K>&lt;Space&gt;b</K> 那一族
+    </>
+  ),
+  tabs: (
+    <>
+      <K>&lt;Tab&gt;</K> 那一族。注意它关的是<b className="text-amber-500/90">整个标签页</b>，
+      不是单个 buffer
+    </>
+  ),
+  files: (
+    <>
+      只记一条规律:<b className="text-blue-300">小写 = 项目根目录</b>,大写 = 当前目录
+    </>
+  ),
+  text: (
+    <>
+      <K>diw</K> <K>daw</K> <K>ip</K> <K>i(</K> …。核心是 inner 带不带边缘空白
+    </>
+  ),
+  ui: (
+    <>
+      <K>&lt;Space&gt;u</K> 那一族。记号大小写很密（<K>uL</K> <K>ul</K> <K>ug</K>{" "}
+      <K>uz</K> <K>uZ</K> <K>uA</K> …），边按边看画面怎么变
+    </>
+  ),
+  diagnostics: (
+    <>
+      <K>[d</K> <K>]d</K> 在诊断间移动，加上 <K>gr*</K> 六个 LSP 查询。⚠️{" "}
+      <K>gd</K> 是 Git diff，不是跳定义
+    </>
+  ),
+  seq: (
+    <>
+      其余全部键位按序列<b>盲背</b>。按下去只弹面板、没有画面可看的那种
+    </>
+  ),
+};
 
 export default function HomePage() {
   /**
@@ -164,40 +101,43 @@ export default function HomePage() {
    * 正确做法:初始为 null(首屏占位),挂载后再读。
    * 页面上的 /stats 页早就是这个写法,这里跟着它,不另创一套。
    */
-  const [boards, setBoards] = useState<BoardProgress | null>(null);
-  const [seq, setSeq] = useState<Progress | null>(null);
+  const [progress, setProgress] = useState<SRS.Progress | null>(null);
 
   useEffect(() => {
-    setBoards(loadBoards());
-    setSeq(loadSeq());
+    setProgress(SRS.load());
   }, []);
 
-  const totals = useMemo(() => {
-    // seq 还没读出来时先按空进度算 —— 见下面的骨架分支。
-    const pool = RAW.map((r) => ({ ...r, keys: [r.display] }));
-    return summarize(seq ?? {}, pool as never);
-  }, [seq]);
+  /**
+   * 按板块统计。
+   *
+   * ⚠️ 新模型是**全局一张表**，每条记录带 `board` 标记 ——
+   *    所以这里不需要「哪些 id 属于哪个板块」的映射。
+   */
+  const byBoard = useMemo(() => SRS.byBoard(progress ?? {}), [progress]);
 
+  /** 总进度：所有板块的「已掌握」之和 */
   const overall = useMemo(() => {
-    const done = BOARDS.reduce((a, b) => {
-      if (b.kind === "board") return a + boardSummary(boards ?? {}, b.id, b.total).done;
-      return a + totals.mastered;
-    }, 0);
-    const total = BOARDS.reduce((a, b) => a + b.total, 0);
+    const done = BOARD_DEFS.reduce((a, b) => a + (byBoard[b.id]?.mastered ?? 0), 0);
+    const total = BOARD_DEFS.reduce((a, b) => a + b.total, 0);
     return { done, total };
-  }, [boards, totals]);
+  }, [byBoard]);
 
-  const clearOne = (b: Board) => {
+  /** 现在该复习的条数 */
+  const dueCount = useMemo(
+    () => (progress ? SRS.summarize(progress).due : 0),
+    [progress],
+  );
+
+  const clearOne = (b: (typeof BOARD_DEFS)[number]) => {
     if (!confirm(`清掉「${b.name}」的进度?`)) return;
-    if (b.kind === "board") {
-      const next = clearBoard(boards ?? {}, b.id);
-      setBoards(next);
-      saveBoards(next);
-    } else {
-      if (!confirm("这会清掉全部盲背记录(已掌握/还不熟/没见过),确定?")) return;
-      resetSeq();
-      setSeq({});
-    }
+    setProgress((prev) => {
+      const next = { ...(prev ?? {}) };
+      for (const [id, item] of Object.entries(next)) {
+        if (item.board === b.id) delete next[id];
+      }
+      SRS.save(next);
+      return next;
+    });
   };
 
   /**
@@ -210,7 +150,7 @@ export default function HomePage() {
    * 早返回 + 条件 hook 是 React 里最典型的自伤方式之一:
    * 规则不是「hook 要写在最前面」,而是「每次渲染的 hook 数量和顺序必须一致」。
    */
-  if (boards === null || seq === null) {
+  if (progress === null) {
     return (
       <main className="mx-auto max-w-2xl px-5 py-8 font-mono">
         <h1 className="text-xl font-bold">reflex</h1>
@@ -245,14 +185,26 @@ export default function HomePage() {
             style={{ width: `${overall.total ? (overall.done / overall.total) * 100 : 0}%` }}
           />
         </div>
+        {/*
+          ⚠️ 「该复习 n 条」是统一进度模型才做得到的事。
+          旧版两套存储（「连对3次」+「做过」）量纲不同，
+          连时间维度都没有，排不出复习队列。
+        */}
+        {dueCount > 0 && (
+          <div className="mt-2 flex items-center gap-2 text-[11px]">
+            <span className="rounded bg-amber-950 px-1.5 py-0.5 text-amber-400">
+              该复习 {dueCount} 条
+            </span>
+            <span className="text-neutral-600">答错的会立刻回插，连对越多复习越远</span>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 space-y-2">
-        {BOARDS.map((b) => {
-          const s =
-            b.kind === "board"
-              ? boardSummary(boards, b.id, b.total)
-              : { done: totals.mastered, total: b.total, left: Math.max(0, b.total - totals.mastered) };
+        {BOARD_DEFS.map((b) => {
+          const st = byBoard[b.id];
+          const done = st?.mastered ?? 0;
+          const s = { done, total: b.total, left: Math.max(0, b.total - done) };
           const pct = s.total ? (s.done / s.total) * 100 : 0;
           const inner = (
             <>
@@ -266,7 +218,7 @@ export default function HomePage() {
               <div className="mt-1 h-1 w-full overflow-hidden rounded bg-neutral-800">
                 <div className="h-full bg-green-500/70" style={{ width: `${pct}%` }} />
               </div>
-              <div className="mt-1 text-[11px] leading-relaxed text-neutral-500">{b.what}</div>
+              <div className="mt-1 text-[11px] leading-relaxed text-neutral-500">{WHAT[b.id] ?? b.what}</div>
             </>
           );
 

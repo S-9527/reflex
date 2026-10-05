@@ -13,14 +13,17 @@ import {
 import type { DrillTask } from "@/lib/drill";
 import { defaultToPanelKey, useDrill } from "@/lib/use-drill";
 import {
-  AcceptList,
+  DrillFlow,
   FlashLine,
+  KeySequence,
   KeyLog,
   PendingHint,
   Provenance,
   TaskBar,
   TaskBox,
+  streakOf,
 } from "@/lib/drill-ui";
+import { formatMs } from "@/lib/session";
 
 /**
  * 文本对象练习 —— 给你一段代码,高亮出「按这个键会选中哪一块」。
@@ -97,7 +100,6 @@ export default function TextObjDrill() {
     // apply 永不失败:题目区已经把范围高亮出来了,判据是键本身。
     apply: (_seq, s) => s,
     toPanelKey: defaultToPanelKey,
-    advanceMs: 1600,
   });
 
   const q = Q_OF.get(d.task.id)!;
@@ -105,11 +107,27 @@ export default function TextObjDrill() {
   const range: Range | null = locate(SRC, spec.kind, spec.edge, q.line, q.col);
 
   return (
-    <div className="space-y-4">
+    <DrillFlow
+      cursor={d.taskIndex}
+      total={d.session.queue.length}
+      accuracy={d.summary.accuracy}
+      keysPerMin={d.summary.keysPerMin}
+      streak={streakOf(d.session.results)}
+      done={d.done}
+      summary={d.summary}
+      formatMs={formatMs}
+      descOf={(id) => TASKS.find((t) => t.id === id)?.desc ?? id}
+      onRetry={() => d.restart()}
+      onRetryMistakes={() => d.restart(d.session.results.filter((r) => !r.ok).map((r) => r.taskId))}
+      mode={d.mode}
+      onMode={d.setMode}
+      hint={d.hint}
+      canHint={d.canHint}
+      onHint={d.showHint}
+    >
       <TaskBar
         tasks={TASKS}
-        current={d.taskIndex}
-        solved={d.solved}
+        current={TASKS.findIndex((t) => t.id === d.task.id)}
         solvedAll={d.solvedAll}
         onClear={d.clearProgress}
         onPick={d.setTaskIndex}
@@ -126,7 +144,9 @@ export default function TextObjDrill() {
           <span>会选中下面高亮的那一块</span>
         </div>
         <div className="mt-1 text-neutral-500">{spec.desc}</div>
-        <AcceptList task={d.task} />
+        <div className="mt-3">
+          <KeySequence keys={d.shownKeys} feed={d.keyFeed} />
+        </div>
         <PendingHint pending={d.pending} />
       </TaskBox>
 
@@ -215,7 +235,7 @@ export default function TextObjDrill() {
         <code>para</code> / <code>indent</code> / <code>line</code> 这几个依赖 Vim 内部的
         段落与缩进规则,<b>不硬算</b> —— 算错了比不算更糟,只列实测结果。
       </Provenance>
-    </div>
+    </DrillFlow>
   );
 }
 
@@ -248,6 +268,7 @@ function CodeView({ line, col, range }: { line: number; col: number; range: Rang
     </div>
   );
 }
+
 
 /** 单行内:把 range 覆盖的部分高亮,光标位置标出来 */
 function renderLine(text: string, ln: number, range: Range, col: number) {

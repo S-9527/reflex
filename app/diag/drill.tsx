@@ -24,15 +24,18 @@ import { ORIGIN_NOTE, VERIFIED_NOTE } from "@/lib/provenance";
 import type { DrillTask } from "@/lib/drill";
 import { defaultToPanelKey, NO_EFFECT, useDrill } from "@/lib/use-drill";
 import {
-  AcceptList,
+  DrillFlow,
   FlashLine,
+  KeySequence,
   KeyLog,
   NativeRef,
   PendingHint,
   Provenance,
   TaskBar,
   TaskBox,
+  streakOf,
 } from "@/lib/drill-ui";
+import { formatMs } from "@/lib/session";
 
 /**
  * 诊断 / LSP 跳转练习。
@@ -157,7 +160,6 @@ export default function DiagDrill() {
     init,
     apply,
     toPanelKey: defaultToPanelKey,
-    advanceMs: 1600,
     keepStateOnAdvance: false,
     noEffectText: (seq) => `${seq.join("")} —— 已经在边界上了,这一步走不动`,
   });
@@ -166,7 +168,24 @@ export default function DiagDrill() {
   const cur = sorted[d.state.cur];
 
   return (
-    <div className="space-y-4">
+    <DrillFlow
+      cursor={d.taskIndex}
+      total={d.session.queue.length}
+      accuracy={d.summary.accuracy}
+      keysPerMin={d.summary.keysPerMin}
+      streak={streakOf(d.session.results)}
+      done={d.done}
+      summary={d.summary}
+      formatMs={formatMs}
+      descOf={(id) => TASKS.find((t) => t.id === id)?.desc ?? id}
+      onRetry={() => d.restart()}
+      onRetryMistakes={() => d.restart(d.session.results.filter((r) => !r.ok).map((r) => r.taskId))}
+      mode={d.mode}
+      onMode={d.setMode}
+      hint={d.hint}
+      canHint={d.canHint}
+      onHint={d.showHint}
+    >
       {/* gd 的坑放最上面 —— 这是最容易按错的一个 */}
       <div className="rounded border border-red-900/60 bg-red-950/20 p-3 text-[11px] leading-relaxed">
         <b className="text-red-300">⚠️ 我按记忆写错过一次,记在这免得你也踩:</b>
@@ -187,8 +206,7 @@ export default function DiagDrill() {
 
       <TaskBar
         tasks={TASKS}
-        current={d.taskIndex}
-        solved={d.solved}
+        current={TASKS.findIndex((t) => t.id === d.task.id)}
         solvedAll={d.solvedAll}
         onClear={d.clearProgress}
         onPick={d.setTaskIndex}
@@ -197,10 +215,16 @@ export default function DiagDrill() {
 
       <TaskBox>
         <div className="text-neutral-300">
-          按 <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{fullKey(k)}</kbd>{" "}
           {movesCursor(k) ? "把光标移到下一个位置" : k.block === "面板" ? "打开面板" : "问语言服务器一个问题"}
         </div>
         <div className="mt-1.5 text-neutral-400">{k.acts}</div>
+        {/*
+          ⚠️ 旧版这里直接写出 `fullKey(k)` —— 等于把答案印在题面上。
+          改成逐键上色：按一个键变一次色，答案在按对之后才完整显现。
+        */}
+        <div className="mt-3">
+          <KeySequence keys={d.shownKeys} feed={d.keyFeed} />
+        </div>
 
         {/* 归属:Vim 原生还是插件 */}
         <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-[11px]">
@@ -244,7 +268,6 @@ export default function DiagDrill() {
             </>
           )}
         </div>
-        <AcceptList task={d.task} />
         <NativeRef native={NATIVE[k.key]} />
         {k.block === "面板" && (
           <div className="mt-1 text-[11px] text-amber-500/90">
@@ -338,7 +361,7 @@ export default function DiagDrill() {
         界面上已标注。原生 Ex 里那些 <code>vim.lsp.buf.*</code> 写法直接照抄本机 desc 里的函数名,
         不是我翻译的。
       </Provenance>
-    </div>
+    </DrillFlow>
   );
 }
 

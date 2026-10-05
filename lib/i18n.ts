@@ -238,8 +238,9 @@ export const translations: Record<string, string> = {
 
   // ⚠️ 以下 desc 是插件内部标记,不是用户可感知的动作。
   //    译成中文反而会误导("哪个 Noice?"),所以原样保留英文。
-  "MiniPairs <BS>": "MiniPairs <BS>",
-  "which_key_ignore": "which_key_ignore",
+  //    注意:MiniPairs <BS> / which_key_ignore 的真翻译在文件末尾
+  //    （它们是 auto-pairs 那一族，见下面的分组说明），
+  //    这里不再重复声明 —— 重复 key 会让「翻译表自身没有重复 key」那条测试红。
   "vim.snippet.jump if active, otherwise <Tab>": "跳到下一个代码片段(无片段则缩进)",
   "vim.snippet.jump if active, otherwise <S-Tab>": "跳到上一个代码片段(无片段则反缩进)",
   "Noice All": "Noice:全部通知",
@@ -264,6 +265,31 @@ export const translations: Record<string, string> = {
 
   // ── 剩余的 Ex 命令(不翻,原样保留)───────────────
   // 这些 desc 本身就是命令名,翻译成中文反而看不懂。
+
+  // ── auto-pairs / MiniPairs(Insert 模式自动配对)─────────
+  //
+  // ⚠️ 这一族是**新数据源才带进来的**。旧版在抽取阶段就把它们过滤掉了
+  //   （理由见旧 build-dataset 的注释：auto-pairs 不是"按键功能"）。
+  //   现在全量保留，所以要给它们翻译 —— 否则 i18n 覆盖率会掉到 85%。
+  //
+  //   它们的语义是「打左括号自动补右括号」，desc 形如
+  //   `Open action for "()" pair`。翻译时保留括号内容（那是键本身）。
+  'Open action for "()" pair': "插入 ( 时自动补 )",
+  'Close action for "()" pair': "在 ( 前插入时自动补 )",
+  'Open action for "[]" pair': "插入 [ 时自动补 ]",
+  'Close action for "[]" pair': "在 [ 前插入时自动补 ]",
+  'Open action for "{}" pair': "插入 { 时自动补 }",
+  'Close action for "{}" pair': "在 { 前插入时自动补 }",
+  'Closeopen action for \'""\' pair': '插入 " 时自动配对(再按一次则闭合)',
+  'Closeopen action for "\'\'" pair': "插入 ' 时自动配对(再按一次则闭合)",
+  'Closeopen action for "``" pair': "插入 ` 时自动配对(再按一次则闭合)",
+
+  // MiniPairs 的退格 / 回车行为
+  "MiniPairs <BS>": "退格时一并删掉配对的那半",
+  "MiniPairs <CR>": "回车时自动缩进并展开配对",
+
+  // 插件内部标记,原样保留英文（它在 which-key 里就是不显示的哨兵）
+  which_key_ignore: "which-key 忽略标记(不显示在面板里)",
 };
 
 /** 按 (键, 模式) 精确覆盖的例子。键 = `${display}|${mode}` */

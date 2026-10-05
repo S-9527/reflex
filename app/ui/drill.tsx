@@ -12,17 +12,22 @@ import {
   type UiToggle,
 } from "@/lib/ui-toggles";
 import { ORIGIN_NOTE, VERIFIED_NOTE } from "@/lib/provenance";
+import { taskIdOf } from "@/lib/task-id";
 import type { DrillTask } from "@/lib/drill";
 import { defaultToPanelKey, useDrill } from "@/lib/use-drill";
 import {
+  DrillFlow,
   FlashLine,
   KeyLog,
+  KeySequence,
   NativeRef,
   PendingHint,
   Provenance,
   TaskBar,
   TaskBox,
+  streakOf,
 } from "@/lib/drill-ui";
+import { formatMs } from "@/lib/session";
 
 /**
  * 界面开关练习 —— 练 `u*` 那一族。
@@ -52,13 +57,19 @@ import {
 type On = string[];
 
 const TASKS: DrillTask[] = UI_TOGGLES.map((t) => ({
-  id: t.key,
+  // ⚠️ 全局 id（`n|<Space>uL`）—— 跨板块共享进度（见 lib/task-id.ts）
+  id: taskIdOf("ui", fullKey(t)),
   // 按钮上写全(带 leader),不然看着像两键
   short: `S${t.key}`,
   desc: t.desc,
   // ⚠️ leader + 两个字符,逐键。实测真实 lhs 是 " uL"(前导空格 = leader)
   accept: [keySeq(t)],
 }));
+
+/** DrillTask.id（全局 id）→ 原题。取 desc / group / isToggle 要用 */
+const TASK_OF = new Map<string, UiToggle>(
+  UI_TOGGLES.map((t) => [taskIdOf("ui", fullKey(t)), t]),
+);
 
 export default function UiToggleDrill() {
   const init = useCallback((): On => [], []);
@@ -76,17 +87,41 @@ export default function UiToggleDrill() {
     init,
     apply,
     toPanelKey: defaultToPanelKey,
-    advanceMs: 1600,
     // ⚠️ 必须保留状态 —— 这一族的状态是「哪些开关开着」,
     // 每题清空的话连按三个开关就只看得到最后一个,
     // 「按了画面真的变」这个唯一能可视化的反馈就没了。
     keepStateOnAdvance: true,
   });
 
-  const t = UI_TOGGLES.find((x) => x.key === d.task.id)!;
+  /**
+   * ⚠️ 用 `TASK_OF` 反查，不能拿 `d.task.id` 直接比 `x.key`。
+   *
+   * `d.task.id` 现在是**全局 id**（`n|<Space>uL`），而 `x.key` 是 `uL` ——
+   * 直接比会查不到，解构出来是 undefined，页面报
+   * 「Cannot read properties of undefined (reading 'group')」直接 500。
+   * （这个错误实测踩到：`/ui` 整页白屏。）
+   */
+  const t = TASK_OF.get(d.task.id)!;
 
   return (
-    <div className="space-y-4">
+    <DrillFlow
+      cursor={d.taskIndex}
+      total={d.session.queue.length}
+      accuracy={d.summary.accuracy}
+      keysPerMin={d.summary.keysPerMin}
+      streak={streakOf(d.session.results)}
+      done={d.done}
+      summary={d.summary}
+      formatMs={formatMs}
+      descOf={(id) => TASKS.find((t) => t.id === id)?.desc ?? id}
+      onRetry={() => d.restart()}
+      onRetryMistakes={() => d.restart(d.session.results.filter((r) => !r.ok).map((r) => r.taskId))}
+      mode={d.mode}
+      onMode={d.setMode}
+      hint={d.hint}
+      canHint={d.canHint}
+      onHint={d.showHint}
+    >
       <div className="rounded border border-amber-800/60 bg-amber-950/15 p-3 text-[11px] leading-relaxed text-amber-200/90">
         <b>⚠️ 测不出来的是「画面长什么样」,不是「这个键干什么」。</b>
         <div className="mt-1 text-amber-100/70">
@@ -105,8 +140,7 @@ export default function UiToggleDrill() {
 
       <TaskBar
         tasks={TASKS}
-        current={d.taskIndex}
-        solved={d.solved}
+        current={TASKS.findIndex((t) => t.id === d.task.id)}
         solvedAll={d.solvedAll}
         onClear={d.clearProgress}
         onPick={d.setTaskIndex}
@@ -115,8 +149,16 @@ export default function UiToggleDrill() {
 
       <TaskBox>
         <div className="text-neutral-300">
-          按 <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{fullKey(t)}</kbd>{" "}
           {isToggle(t) ? "打开" : "执行"}「{t.desc.replace(/^Toggle /, "")}」
+        </div>
+
+        {/*
+          ⚠️ 旧版这里直接写出 `fullKey(t)` —— 那是三键的完整答案，
+          等于把答案印在题面上，用户扫一眼就能抄。
+          改成逐键上色：按一个键变一次色，答案在按对之后才完整显现。
+        */}
+        <div className="mt-3">
+          <KeySequence keys={d.shownKeys} feed={d.keyFeed} />
         </div>
 
         {/* 作用 —— 测不出画面,这个还是有的 */}
@@ -238,7 +280,7 @@ export default function UiToggleDrill() {
         且 23/24 条是 Lua 回调,页面上的视觉差异是<b>按约定画的</b>。
         原生 Ex 对照里写「无 Ex 等价」的那些是真没有,不是没查。
       </Provenance>
-    </div>
+    </DrillFlow>
   );
 }
 

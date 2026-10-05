@@ -45,11 +45,18 @@ type Cell = {
   ch: string;
   /** 绑定的完整 display,如 "<Space>ff" */
   displays: string[];
-  levels: number[];
+  /** 这些键分别属于哪些分组(which-key 的名字) */
+  groups: string[];
   count: number;
 };
 
-export default function KeymapView({ bindings }: { bindings: Binding[] }) {
+export default function KeymapView({
+  bindings,
+  groupNames = {},
+}: {
+  bindings: Binding[];
+  groupNames?: Record<string, string>;
+}) {
   const [hover, setHover] = useState<string | null>(null);
 
   const cells = useMemo(() => {
@@ -61,14 +68,15 @@ export default function KeymapView({ bindings }: { bindings: Binding[] }) {
       const m = last.match(/^([a-zA-Z0-9,.;'/\[\]\\`<>-])$/);
       const ch = m ? m[1].toLowerCase() : "";
       if (!ch) continue;
-      if (!map.has(ch)) map.set(ch, { ch, displays: [], levels: [], count: 0 });
+      if (!map.has(ch)) map.set(ch, { ch, displays: [], groups: [], count: 0 });
       const c = map.get(ch)!;
       if (!c.displays.includes(b.display)) c.displays.push(b.display);
-      if (!c.levels.includes(b.level)) c.levels.push(b.level);
+      const label = groupNames[b.group] ?? b.group;
+      if (!c.groups.includes(label)) c.groups.push(label);
       c.count++;
     }
     return map;
-  }, [bindings]);
+  }, [bindings, groupNames]);
 
   const maxCount = Math.max(1, ...[...cells.values()].map((c) => c.count));
 
@@ -93,7 +101,7 @@ export default function KeymapView({ bindings }: { bindings: Binding[] }) {
                   onMouseEnter={() => setHover(k)}
                   onMouseLeave={() => setHover(null)}
                   className={`flex h-11 w-10 items-center justify-center rounded border text-sm font-bold uppercase transition-colors ${cellCls(c)}`}
-                  title={c ? `${c.displays.join("  ")}\n关卡 ${c.levels.join(", ")}` : "数据集里没有这个键"}
+                  title={c ? `${c.displays.join("  ")}\n${c.groups.join(" / ")}` : "数据集里没有这个键"}
                 >
                   {k}
                   {c && <span className="ml-0.5 text-[9px] font-normal opacity-60">{c.count}</span>}
@@ -111,7 +119,7 @@ export default function KeymapView({ bindings }: { bindings: Binding[] }) {
             <span
               key={s.key}
               className={`rounded border px-2 py-1 text-[11px] ${cellCls(c)}`}
-              title={c ? `${c.displays.join("  ")}\n关卡 ${c.levels.join(", ")}` : s.hint}
+              title={c ? `${c.displays.join("  ")}\n${c.groups.join(" / ")}` : s.hint}
             >
               {s.label}
               {c && <span className="ml-1 opacity-60">{c.count}</span>}
@@ -148,7 +156,7 @@ export default function KeymapView({ bindings }: { bindings: Binding[] }) {
               </span>
             ))}
           </div>
-          <div className="mt-1 text-neutral-600">关卡 {cells.get(hover)!.levels.join(", ")}</div>
+          <div className="mt-1 text-neutral-600">{cells.get(hover)!.groups.join(" / ")}</div>
         </div>
       )}
     </div>

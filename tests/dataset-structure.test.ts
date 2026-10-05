@@ -37,39 +37,58 @@ describe("leader 层级结构", () => {
     }
   });
 
-  it("关卡与 leader 层级一致:同一 <Space>X 的键不该散在多个关卡", () => {
-    const byPrefix = new Map<string, Set<number>>();
+  /**
+   * ⚠️ 旧版测的是「同一 `<Space>X` 的键不该散在多个**关卡**」。
+   *
+   * 关卡概念删了，但这条**需求本身仍然成立** —— 只是判据换成
+   * which-key 分组：同一个 leader 前缀下的键，应该落在同一个分组里。
+   * 散开说明分组抽取或前缀匹配坏了。
+   *
+   * ⚠️ 但这条不能对所有前缀都成立：`<Space>u` 下有 `ui` 的开关，
+   *   也可能有别的族混进来。所以只挑确定该同组的几个来守。
+   */
+  it("同一 <Space>X 的键落在同一个 which-key 分组", () => {
+    const byPrefix = new Map<string, Set<string>>();
     for (const b of BINDINGS) {
       const p = prefix2(b.display);
       if (!p) continue;
       if (!byPrefix.has(p)) byPrefix.set(p, new Set());
-      byPrefix.get(p)!.add(b.level);
+      byPrefix.get(p)!.add(b.group);
     }
-    for (const [p, levels] of byPrefix) {
-      if (levels.size <= 1) continue;
-      // <Space>u 下有 <Space>uz(界面)和 <Space>uA(标签栏)等不同关注点,
-      // 分在第 8/10 关是有意的。这里只挑"确定该同关"的前缀来守。
-      const MUST_SAME = ["<Space>b", "<Space>f", "<Space>g", "<Space>c", "<Space>s", "<Space>q", "<Space>l", "<Space>w"];
-      if (!MUST_SAME.includes(p)) continue;
+    // 这些前缀在 LazyVim 里都有显式的 group 声明，不该散开
+    const MUST_SAME = ["<Space>b", "<Space>f", "<Space>g", "<Space>c", "<Space>s", "<Space>q"];
+    for (const p of MUST_SAME) {
+      const groups = byPrefix.get(p);
+      if (!groups) continue;
       expect(
-        [...levels],
-        `前缀 ${p} 的键散在关卡 ${[...levels].join(",")} —— 应该同关`,
+        [...groups],
+        `前缀 ${p} 的键散在分组 ${[...groups].join(",")} —— 应该同组`,
       ).toHaveLength(1);
     }
   });
 
-  it("第 10 关不该装着一堆无法归类的键(兜底桶)", () => {
-    // 兜底桶的名字就叫 "其他 leader 键",它必须有明确理由存在。
-    // 如果第 10 关只剩这些,说明大多数键其实没归好。
-    const l10 = BINDINGS.filter((b) => b.level === 10);
-    const allIn10 = l10.every((b) => b.group === "leader-other");
-    expect(allIn10, "第 10 关混进了已归组的键").toBe(true);
+  it("兜底桶确实只装没有 which-key 分组的键", () => {
+    // 「leader 其它」是按形态兜底归的类。如果它里面混进了
+    // **有** which-key 分组的键，说明前缀匹配漏了。
+    const fallback = BINDINGS.filter((b) => b.group === "leader-misc");
+    for (const b of fallback) {
+      expect(
+        b.inWhichKey,
+        `${b.display} 在兜底桶里，但它其实有 which-key 分组`,
+      ).toBe(false);
+    }
   });
 });
 
 describe("模式标注", () => {
-  it("每条键都有模式,且是我们打算练的那几种", () => {
-    const OK = new Set(["n", "v", "x", "o", "c"]);
+  /**
+   * ⚠️ 新数据源**不做过滤**，8 个 mode 全收。
+   *
+   * 旧版在抽取阶段就扔掉 Insert/Select，于是这里只允许 5 个 mode。
+   * 现在全量拉出来、要不要练交给训练器决定，所以 `i`/`s`/`t` 也会出现。
+   */
+  it("每条键都有模式,且是 nvim 真实存在的模式", () => {
+    const OK = new Set(["n", "i", "v", "x", "o", "c", "s", "t"]);
     for (const b of BINDINGS) {
       expect(OK.has(b.mode), `${b.display} 的模式 ${b.mode} 不在预期范围`).toBe(true);
     }

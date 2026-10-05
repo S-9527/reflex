@@ -10,18 +10,23 @@ import {
   findFileKey,
   type FileKey,
 } from "@/lib/files";
+import { COMMANDS } from "@/lib/bindings";
+import { taskIdOf } from "@/lib/task-id";
 import type { DrillTask } from "@/lib/drill";
 import { defaultToPanelKey, useDrill } from "@/lib/use-drill";
 import {
-  AcceptList,
+  DrillFlow,
   FlashLine,
+  KeySequence,
   KeyLog,
   NativeRef,
   PendingHint,
   Provenance,
   TaskBar,
   TaskBox,
+  streakOf,
 } from "@/lib/drill-ui";
+import { formatMs } from "@/lib/session";
 
 /**
  * 文件浏览器练习 —— 练的是**一条规律**,不是十几个键。
@@ -51,14 +56,50 @@ import {
  * 而引擎的 toPanelKey 收不了 Ctrl —— 所以这里单独把 Ctrl+`/` 翻译成
  * `<C-/>`,其余带 Ctrl 的键照旧返回 null 放行(不劫持 Ctrl+R / F12)。
  */
-const TASKS: DrillTask[] = FILE_TASKS.map((t, i) => ({
-  id: `${t.key}#${i}`,
-  short: t.key,
-  desc: "",
-  accept: findFileKey(t.key)?.seqs ?? [],
-}));
+/**
+ * ⚠️ 解法从 `COMMANDS` 取（不再用手写表 `findFileKey`）。
+ *
+ * 手写表和实测数据对不上的教训这个项目已经吃过三次
+ * （`<Space>bb` 被当成 `L` 的等价解、`<Tab>d` 漏了 leader 前缀）。
+ * 所以能映射到 `COMMANDS` 的一律用实测数据。
+ */
+const CMD_BY_DISPLAY = new Map(COMMANDS.map((c) => [c.display, c]));
+
+const TASKS: DrillTask[] = FILE_TASKS.map((t) => {
+  const cmd = CMD_BY_DISPLAY.get(t.key);
+  const accept = cmd
+    ? [splitSeq(cmd.display), ...cmd.alternates.map((a) => splitSeq(a))]
+    : (findFileKey(t.key)?.seqs ?? []);
+  return {
+    // ⚠️ 全局 id —— 跨板块共享进度（见 lib/task-id.ts）
+    id: taskIdOf("files", t.key),
+    short: t.key,
+    desc: "",
+    accept,
+  };
+});
+
+/** Vim 记法 → 逐键数组 */
+function splitSeq(s: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === "<") {
+      const end = s.indexOf(">", i);
+      if (end > i) {
+        out.push(s.slice(i, end + 1));
+        i = end + 1;
+        continue;
+      }
+    }
+    out.push(s[i]);
+    i++;
+  }
+  return out;
+}
+
 const KEY_OF = new Map<string, FileKey | undefined>(
-  FILE_TASKS.map((t, i) => [`${t.key}#${i}`, findFileKey(t.key)]),
+  TASKS.map((t, i) => [t.id, findFileKey(FILE_TASKS[i].key)]),
 );
 
 /** 按钮上把 <Space> 缩成 S,一格显示得下 */
@@ -90,17 +131,32 @@ export default function FileDrill() {
     init: () => null,
     apply,
     toPanelKey,
-    advanceMs: 1500,
   });
 
   const target = KEY_OF.get(d.task.id)!;
 
   return (
-    <div className="space-y-4">
+    <DrillFlow
+      cursor={d.taskIndex}
+      total={d.session.queue.length}
+      accuracy={d.summary.accuracy}
+      keysPerMin={d.summary.keysPerMin}
+      streak={streakOf(d.session.results)}
+      done={d.done}
+      summary={d.summary}
+      formatMs={formatMs}
+      descOf={(id) => TASKS.find((t) => t.id === id)?.desc ?? id}
+      onRetry={() => d.restart()}
+      onRetryMistakes={() => d.restart(d.session.results.filter((r) => !r.ok).map((r) => r.taskId))}
+      mode={d.mode}
+      onMode={d.setMode}
+      hint={d.hint}
+      canHint={d.canHint}
+      onHint={d.showHint}
+    >
       <TaskBar
         tasks={TASKS}
-        current={d.taskIndex}
-        solved={d.solved}
+        current={TASKS.findIndex((t) => t.id === d.task.id)}
         solvedAll={d.solvedAll}
         onClear={d.clearProgress}
         onPick={d.setTaskIndex}
@@ -138,7 +194,9 @@ export default function FileDrill() {
         <div className="text-neutral-300">
           {VERB_NAMES[target.verb]} · 要开<b>{target.scope ? SCOPE_NAMES[target.scope] : "不分目录的"}</b>那个
         </div>
-        <AcceptList task={d.task} />
+        <div className="mt-3">
+          <KeySequence keys={d.shownKeys} feed={d.keyFeed} />
+        </div>
         <NativeRef native={target.native} note={target.desc} noteClass="text-neutral-500" />
         <PendingHint pending={d.pending} />
       </TaskBox>
@@ -173,6 +231,6 @@ export default function FileDrill() {
         <code>:files</code> 这些<b>缩写在你机器上不生效</b>(缺 <code>~/.vim/abbr/</code>,
         要 <code>:mkexrc</code> 生成),所以 native 列只给完整写法。
       </Provenance>
-    </div>
+    </DrillFlow>
   );
 }
