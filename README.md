@@ -164,7 +164,8 @@ type Item = {
 `~/.config/nvim/lua/plugins/` 下建一个文件：
 
 ```lua
-return { "/home/anguish/workspace/reflex/scripts/reflex-layout-plugin.lua" }
+-- 把路径改成你自己的克隆位置
+return { vim.fn.expand("~/path/to/reflex/scripts/reflex-layout-plugin.lua") }
 ```
 
 它是**只读旁路**：不接管任何键位、不改编辑行为，只往

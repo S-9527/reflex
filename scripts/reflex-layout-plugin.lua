@@ -2,9 +2,10 @@
 --
 -- ## 装法
 --
--- 在 ~/.config/nvim/lua/plugins/ 下建一个文件,内容就是这一行:
+-- 在 ~/.config/nvim/lua/plugins/ 下建一个文件，内容指向**本仓库**的
+-- 这个脚本（把下面这行改成你自己的克隆路径）：
 --
---   return { "/home/anguish/workspace/reflex/scripts/reflex-layout-plugin.lua" }
+--   return { vim.fn.expand("~/path/to/reflex/scripts/reflex-layout-plugin.lua") }
 --
 -- lazy.nvim 会把它当普通插件目录加载并执行。重启 nvim 即生效。
 --
