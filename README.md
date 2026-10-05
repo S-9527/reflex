@@ -7,7 +7,7 @@ Neovim 肌肉记忆训练器。把本机 LazyVim 的真实键位抽出来，做�
 ```bash
 pnpm install
 pnpm dev          # http://localhost:3000
-pnpm vitest run   # 839 个测试
+pnpm vitest run   # 850 个测试
 npx tsc --noEmit  # 类型检查
 ```
 
@@ -145,7 +145,7 @@ type Item = {
 | `/ui` | `<Space>u` 界面开关（24 条） | 模拟编辑器 |
 | `/diag` | 诊断与 LSP 跳转 | 诊断列表 + 光标行（`]d` 绕回 / `]q` 停住） |
 | `/search` | `n` / `N` 搜索跳转 | 匹配高亮 + 光标 |
-| `/windows` | 分屏、切焦、缩放 | 分屏树（三个模式都走统一引擎） |
+| `/windows` | 分屏、切焦、缩放 | 分屏树（四个模式都走统一引擎） |
 | `/seq` | 其余键位盲背 | 无（纯序列） |
 | `/stats` | 数据集全貌 + 接本机 nvim 看实时布局 | 键盘图 |
 

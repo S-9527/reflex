@@ -1105,6 +1105,54 @@ jump（`drill.tsx` 297 行）、build（`split.tsx` 413 行）。
 
 ---
 
+### 窗口缩放可视化（`/windows` 的第四个模式）
+
+新增 `lib/split.ts` 的 `resizeByCells()` + `canResize()` +
+`app/windows/resize.tsx`（11 个测试）。
+
+#### ⚠️⚠️ 实测又推翻了书面结论（第六次）
+
+早先 `lib/keys.ts` 里写过（后来清理时删了）：
+
+> 书 9.3.5 说裸按 `<C-Up>` 只挪一行/一列，真实场景要 `20<C-Up>`
+
+**实测两条都不对**（探针 `scripts/probe-resize.lua`）：
+
+```
+<C-Right> 的 rhs = <Cmd>vertical resize +2<CR>   ← 每次挪 2 列
+按 10<C-Right> → 也只挪 2 列                      ← 计数被忽略
+按 30<C-Right> → 还是只挪 2 列
+```
+
+| 按键 | 宽度变化 |
+|------|---------|
+| `<C-Right>` | 39 → 37（挪 2）|
+| `10<C-Right>` | 37 → 35（**也是 2**）|
+| `30<C-Right>` | 35 → 33（**还是 2**）|
+
+原因：本机 LazyVim 把步长**硬编码在 rhs 里**（`resize +2`），
+不像 Vim 内建的 `<C-w>>` 那样吃计数。所以书里那条
+「加计数来多挪」**在本机不成立**。想挪更多得手打
+`:vertical resize +10`。
+
+#### ⚠️ 顺带修掉一处数据错误
+
+`scripts/build-dataset.mjs` 里的原生等价原来写的是 `:resize ±1`
+（凭印象），实测是 **`±2`**。数据集里的 rhs 字节码不会骗人：
+
+```
+<C-Right>  rhs="<Cmd>vertical resize +2<CR>"
+<C-Down>   rhs="<Cmd>resize -2<CR>"
+```
+
+#### 为什么不能用 `lib/split.ts` 原来的 `resize()`
+
+`resize()` 按 **ratio 步进 0.1**，转成实际列数取决于屏宽
+（80 列屏上一步 = 8 列）。而本机是**固定 2 列** ——
+两者语义不同，所以新增了 `resizeByCells()` 做换算。
+
+新增测试专门守这条：**不同屏宽（60/80/120/200 列）下挪的列数一样**。
+
 ## 七、清理项（阶段 0 已完成）
 
 | 项 | 处理 |

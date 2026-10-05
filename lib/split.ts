@@ -522,3 +522,55 @@ export function run(ops: Op[], start = initial()): { layout: Layout; focus: numb
   }
   return { layout: l, focus };
 }
+/* ------------------------------------------------------- 按「列/行」缩放 */
+
+/**
+ * 按**固定列数/行数**缩放 —— 和本机 `<C-Left/Right/Up/Down>` 的实测行为一致。
+ *
+ * ## ⚠️ 为什么不能用上面那个 `resize()`
+ *
+ * `resize()` 按 **ratio 步进 0.1**，转成实际列数取决于屏幕宽度
+ * （80 列屏上一步 = 8 列）。但本机 LazyVim 把这两个键的 rhs
+ * 写成了**硬编码**的固定步长：
+ *
+ * ```
+ * <C-Right>  rhs=<Cmd>vertical resize +2<CR>
+ * <C-Down>   rhs=<Cmd>resize -2<CR>
+ * ```
+ *
+ * 实测（探针 `scripts/probe-resize.lua`）：
+ *
+ * | 按键 | 宽度变化 |
+ * |------|---------|
+ * | `<C-Right>` | 39 → 37（**挪 2**）|
+ * | `10<C-Right>` | 37 → 35（**也是 2**）|
+ * | `30<C-Right>` | 35 → 33（**还是 2**）|
+ *
+ * ⚠️ 所以**书里那条「加计数来多挪」在本机不成立** ——
+ *    rhs 的步长写死了，计数被忽略。这条实测结论很重要，
+ *    因为它和 Vim 内建的 `<C-w>>`（吃计数）行为**不一样**。
+ *
+ * @param cols 这一侧的总列数（或行数）—— 用来把列换算成 ratio
+ * @param step 每次挪多少列（本机是 2）
+ */
+export function resizeByCells(
+  l: Layout,
+  focus: number,
+  axis: "v" | "h",
+  dir: 1 | -1,
+  cols: number,
+  step = 2,
+): Layout | null {
+  if (cols <= 0) return null;
+  // 把「挪 N 列」换算成 ratio 增量
+  const delta = (step / cols) * dir;
+  return resize(l, focus, axis, delta);
+}
+
+/** 这一侧能不能往这个方向缩（有对应的分割点，且没顶到头） */
+export function canResize(l: Layout, focus: number, axis: "v" | "h"): boolean {
+  const p = parentOf(l.root, focus);
+  if (!p) return false;
+  const node = p.node;
+  return node.t === "split" && node.dir === axis;
+}

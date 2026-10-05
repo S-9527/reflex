@@ -5911,7 +5911,7 @@ export const COMMANDS: Command[] = [
   "wkGroup": null,
   "alternates": [],
   "equivBy": "rhs",
-  "native": ":resize +1",
+  "native": ":resize +2",
   "nativeVerified": true,
   "total": 1
  },
@@ -5998,7 +5998,7 @@ export const COMMANDS: Command[] = [
   "wkGroup": null,
   "alternates": [],
   "equivBy": "rhs",
-  "native": ":resize -1",
+  "native": ":resize -2",
   "nativeVerified": true,
   "total": 1
  },
@@ -6015,7 +6015,7 @@ export const COMMANDS: Command[] = [
   "wkGroup": null,
   "alternates": [],
   "equivBy": "rhs",
-  "native": ":vertical resize -1",
+  "native": ":vertical resize -2",
   "nativeVerified": true,
   "total": 1
  },
@@ -6032,7 +6032,7 @@ export const COMMANDS: Command[] = [
   "wkGroup": null,
   "alternates": [],
   "equivBy": "rhs",
-  "native": ":vertical resize +1",
+  "native": ":vertical resize +2",
   "nativeVerified": true,
   "total": 1
  },

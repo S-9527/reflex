@@ -313,10 +313,29 @@ const NATIVE_VERIFIED = {
   "Quickfix List": [":copen", true],
   "Search and Replace": [":substitute", true],
   "Redraw / Clear hlsearch / Diff Update": [":redraw", true],
-  "Decrease Window Height": [":resize -1", true],
-  "Decrease Window Width": [":vertical resize -1", true],
-  "Increase Window Width": [":vertical resize +1", true],
-  "Increase Window Height": [":resize +1", true],
+  /**
+   * ⚠️ 是 `±2` 不是 `±1`。
+   *
+   * 我原来写的是 `±1`（凭印象），实测发现这四个键的 rhs 是
+   * **硬编码的 `resize ±2`**：
+   *
+   * ```
+   * <C-Right>  rhs=<Cmd>vertical resize +2<CR>
+   * <C-Down>   rhs=<Cmd>resize -2<CR>
+   * ```
+   *
+   * 探针：`scripts/probe-resize.lua`。
+   *
+   * ⚠️ 顺带纠正一条**书上的说法**：书里讲「键盘缩放要加计数
+   * （`20<C-Up>`）」，但本机 LazyVim 的映射把步长**写死在 rhs 里**，
+   * 所以 `10<C-Right>` / `30<C-Right>` 实测**都只挪 2 列** ——
+   * 计数被忽略。所以这里的原生等价是 `:vertical resize +2`
+   * （想挪更多得手打 `:vertical resize +10`，那是另一回事）。
+   */
+  "Decrease Window Height": [":resize -2", true],
+  "Decrease Window Width": [":vertical resize -2", true],
+  "Increase Window Width": [":vertical resize +2", true],
+  "Increase Window Height": [":resize +2", true],
   "Previous Tab": [":tabprevious", true],
   "Next Tab": [":tabnext", true],
   "New Tab": [":tabnew", true],
