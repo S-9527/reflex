@@ -51,6 +51,7 @@ describe("板块注册表", () => {
       "text",
       "ui",
       "diagnostics",
+      "search",
       "seq",
     ];
     expect(BOARDS.map((b) => b.id).sort()).toEqual(expected.sort());

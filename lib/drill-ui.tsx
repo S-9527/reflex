@@ -655,3 +655,198 @@ export function SolutionDetail({
     </div>
   );
 }
+
+/**
+ * 诊断跳转可视化 —— 把「光标在诊断间移动」画出来。
+ *
+ * ## 为什么这一族值得画
+ *
+ * 它是唯一一个「状态明确会变、但一直没被可视化」的大族。
+ * `]d` / `[d` 按下去什么会变很清楚：**光标在诊断列表里前后移动**。
+ *
+ * 光看一行文字（「跳到下一个诊断」）记不住两件事：
+ *
+ * 1. **诊断分布在哪些行** —— 画出来才有位置感
+ * 2. **到头会不会绕回** —— 走一遍就看见了
+ *
+ * ## ⚠️ 光标用「整行高亮」而不是箭头
+ *
+ * Vim 里光标是一个字符格。但这一族练的是「跳到哪一行」，
+ * 整行高亮更贴合实际心智，也更容易看清移动。
+ * 当前落在诊断上的那行额外加边框 —— 区分「光标在这」和「这里有诊断」。
+ */
+export function DiagNavView({
+  source,
+  diags,
+  cursor,
+  note,
+}: {
+  /** 代码行 */
+  source: string[];
+  /** 全部诊断 */
+  diags: { lnum: number; endLnum: number; severity: 1 | 2 | 3 | 4; message: string }[];
+  /** 当前光标行（0-based） */
+  cursor: number;
+  /** 上一次跳转的反馈 */
+  note?: string;
+}) {
+  const sevColor: Record<number, string> = {
+    1: "bg-red-500",
+    2: "bg-amber-500",
+    3: "bg-blue-500",
+    4: "bg-neutral-500",
+  };
+  const sevText: Record<number, string> = {
+    1: "text-red-400",
+    2: "text-amber-400",
+    3: "text-blue-400",
+    4: "text-neutral-400",
+  };
+
+  /** 这一行有诊断吗 */
+  const diagOnLine = (ln: number) => diags.find((d) => d.lnum <= ln && ln <= d.endLnum);
+
+  return (
+    <div data-diag-nav className="rounded bg-neutral-950 p-3">
+      <div className="mb-1.5 flex items-baseline gap-3 text-[10px] text-neutral-600">
+        <span>光标在第 {cursor + 1} 行</span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-sm bg-blue-600" />光标
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-sm bg-red-500" />错误
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-sm bg-amber-500" />警告
+        </span>
+      </div>
+
+      <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
+        {source.map((text, ln) => {
+          const d = diagOnLine(ln);
+          const isCursor = ln === cursor;
+          return (
+            <div
+              key={ln}
+              data-line={ln}
+              data-cursor={isCursor ? "1" : undefined}
+              className={
+                isCursor
+                  ? "bg-blue-900/40 ring-1 ring-inset ring-blue-500"
+                  : d
+                    ? "bg-neutral-900/60"
+                    : ""
+              }
+            >
+              {/* 行号左侧：有诊断就点一个色块，位置感就靠它 */}
+              <span className="mr-1 inline-block w-2 align-middle">
+                {d && (
+                  <span
+                    data-sev={d.severity}
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${sevColor[d.severity]}`}
+                  />
+                )}
+              </span>
+              <span className="mr-3 inline-block w-4 text-right text-neutral-700">{ln + 1}</span>
+              <span>{text}</span>
+              {d && (
+                <span className={`ml-2 text-[10px] ${sevText[d.severity]}`}>{d.message}</span>
+              )}
+            </div>
+          );
+        })}
+      </pre>
+
+      {note && (
+        <div data-nav-note className="mt-2 text-[11px] text-amber-300">
+          {note}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 搜索跳转可视化 —— 把「搜索匹配 + 光标 + 高亮」画出来。
+ *
+ * ## 为什么这一族值得画
+ *
+ * `n` / `N` 看着简单，但两件事光看文字看不出来：
+ *
+ * 1. **`n` 不总是「往后」** —— 本机映射是方向感知的，
+ *    用 `?` 倒着搜之后 `n` 反而往前
+ * 2. **`<Esc>` 只清高亮、不清搜索寄存器** —— 清完再按 `n` 还能跳
+ *
+ * 走一遍就明白，比读三行说明有效。
+ */
+export function SearchNavView({
+  source,
+  matches,
+  index,
+  hl,
+  note,
+}: {
+  source: string[];
+  matches: { line: number; col: number; endCol: number }[];
+  /** 当前在第几个匹配 */
+  index: number;
+  /** 高亮是否可见 */
+  hl: boolean;
+  note?: string;
+}) {
+  const cur = matches[index];
+  return (
+    <div data-search-nav className="rounded bg-neutral-950 p-3">
+      <div className="mb-1.5 flex flex-wrap items-baseline gap-3 text-[10px] text-neutral-600">
+        <span>
+          {matches.length} 个匹配
+          {cur && ` · 当前第 ${index + 1} 个（第 ${cur.line + 1} 行）`}
+        </span>
+        <span className={hl ? "text-amber-400" : "text-neutral-700"}>
+          {hl ? "高亮:开" : "高亮:关（Esc 清过）"}
+        </span>
+      </div>
+
+      <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
+        {source.map((text, ln) => (
+          <div key={ln} data-line={ln} className={cur?.line === ln ? "bg-blue-900/30" : ""}>
+            <span className="mr-3 inline-block w-4 text-right text-neutral-700">{ln + 1}</span>
+            <span>
+              {text.split("").map((ch, col) => {
+                // 这个字符被哪个匹配覆盖
+                const m = matches.find((x) => x.line === ln && col >= x.col && col < x.endCol);
+                if (!m) return <span key={col}>{ch}</span>;
+                const isCur = hl && m === cur;
+                // ⚠️ 高亮关掉时全都不上色 —— 但当前那个仍然有底色，
+                //    否则用户看不出光标在哪（Vim 里光标一直在）
+                return (
+                  <span
+                    key={col}
+                    data-match={isCur ? "cur" : "other"}
+                    className={
+                      !hl
+                        ? m === cur
+                          ? "bg-blue-700/60 text-blue-50"
+                          : ""
+                        : isCur
+                          ? "rounded-sm bg-amber-500/70 text-black"
+                          : "rounded-sm bg-amber-900/40 text-amber-200"
+                    }
+                  >
+                    {ch}
+                  </span>
+                );
+              })}
+            </span>
+          </div>
+        ))}
+      </pre>
+
+      {note && (
+        <div data-nav-note className="mt-2 text-[11px] text-amber-300">
+          {note}
+        </div>
+      )}
+    </div>
+  );
+}

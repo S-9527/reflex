@@ -24,6 +24,7 @@ import { ORIGIN_NOTE, VERIFIED_NOTE } from "@/lib/provenance";
 import type { DrillTask } from "@/lib/drill";
 import { defaultToPanelKey, NO_EFFECT, useDrill } from "@/lib/use-drill";
 import {
+  DiagNavView,
   DrillFlow,
   FlashLine,
   KeySequence,
@@ -36,6 +37,7 @@ import {
   streakOf,
 } from "@/lib/drill-ui";
 import { formatMs } from "@/lib/session";
+import { applyNav, isNavKey } from "@/lib/diag-nav";
 
 /**
  * 诊断 / LSP 跳转练习。
@@ -71,7 +73,18 @@ const sorted = sortedDiags();
 const counts = countBySeverity(sorted);
 
 /** 页面状态:游标停在第几条 + 已打开的 LSP 选择器 */
-type St = { cur: number; picker: string | null };
+/**
+ * 练习状态。
+ *
+ * ⚠️ 跳转族有两套坐标：
+ *
+ * - `cur` —— 诊断**数组下标**（1..n）。用来取「当前诊断」展示详情
+ * - `line` —— 光标**行号**（0-based）。`DiagNavView` 用它高亮整行
+ *
+ * 为什么都要：画布上要标出光标在哪一行，而诊断详情要知道是哪一条。
+ * 两者可以互相推导，但各自直接存更好读，也避免反复算。
+ */
+type St = { cur: number; line: number; picker: string | null };
 
 /**
  * ⚠️ 每题的起始游标必须**保证这一题有解**。
@@ -82,21 +95,22 @@ type St = { cur: number; picker: string | null };
  */
 function startFor(k: DiagKey): St {
   const n = sorted.length;
+  const mid = Math.floor(n / 2);
   switch (k.key) {
     case "[d":
       // 从中间起,保证能往上走
-      return { cur: Math.floor(n / 2), picker: null };
+      return { cur: mid, line: sorted[mid].lnum, picker: null };
     case "[D":
       // 从中间起,[D 能跳到第一条
-      return { cur: Math.floor(n / 2), picker: null };
+      return { cur: mid, line: sorted[mid].lnum, picker: null };
     case "]d":
     case "]q":
       // 从第一条起,保证能往下走
-      return { cur: 0, picker: null };
+      return { cur: 0, line: sorted[0].lnum, picker: null };
     case "]D":
-      return { cur: 0, picker: null };
+      return { cur: 0, line: sorted[0].lnum, picker: null };
     default:
-      return { cur: 0, picker: null };
+      return { cur: 0, line: 0, picker: null };
   }
 }
 
@@ -124,34 +138,34 @@ export default function DiagDrill() {
 
     // 面板类:弹 Trouble,headless 下建不起来 —— 模型上只记「开过」,
     // 并明确告诉用户这部分没验证过浮窗本身。
-    if (k.block === "面板") return { cur: st.cur, picker: k.acts };
+    if (k.block === "面板") return { ...st, picker: k.acts };
 
     // LSP 查询:不移动光标,弹选择器
-    if (k.block === "LSP 查询") return { cur: st.cur, picker: `${k.acts}(弹选择器)` };
+    if (k.block === "LSP 查询") return { ...st, picker: `${k.acts}(弹选择器)` };
 
-    // 位置移动。到边界不动 → 返回 NO_EFFECT,页面会明确提示,
-    // 不会静默吞掉(静默吞输入最难查)。
-    let cur = st.cur;
-    switch (k.key) {
-      case "]d":
-      case "]q":
-        cur = Math.min(n - 1, cur + 1);
-        break;
-      case "[d":
-      case "[q":
-        cur = Math.max(0, cur - 1);
-        break;
-      case "]D":
-        cur = n - 1;
-        break;
-      case "[D":
-        cur = 0;
-        break;
-      default:
-        return NO_EFFECT;
+    /**
+     * 位置移动。
+     *
+     * ⚠️ 用 `lib/diag-nav.ts` 的模型算，**不在这里手写下标逻辑**。
+     *
+     * 那一族有一条容易搞错的行为：`]d` 到末尾**不绕回**
+     * （和 `:cnext` 会绕回是两回事）。这个判据在 diag-nav 里有
+     * 专门的回归测试盯着，手写在这里就会漏掉测试保护。
+     *
+     * 两套坐标一起更新：`line` 给画布高亮用，`cur` 给诊断详情用。
+     */
+    if (!isNavKey(k.key === "]q" || k.key === "[q" ? k.key.replace("q", "d") : k.key)) {
+      return NO_EFFECT;
     }
-    if (cur === st.cur) return NO_EFFECT;
-    return { cur, picker: null };
+    const nav = applyNav(
+      { cursor: st.line, diags: sorted, note: "" },
+      // `]q`/`[q` 在 quickfix 列表里走，和诊断跳转同构，
+      // 这里复用同一套「下一个/上一个」语义
+      k.key === "]q" ? "]d" : k.key === "[q" ? "[d" : k.key,
+    );
+    if (nav.cursor === st.line) return NO_EFFECT;
+    const idx = sorted.findIndex((x) => x.lnum === nav.cursor);
+    return { cur: idx < 0 ? st.cur : idx, line: nav.cursor, picker: null };
   }, []);
 
   const d = useDrill<St>({
@@ -283,7 +297,23 @@ export default function DiagDrill() {
         <PendingHint pending={d.pending} />
       </TaskBox>
 
-      <CodeView cur={cur} />
+      {/*
+        ⚠️ 跳转族画**整份代码 + 全部诊断 + 光标行**，不是只画当前一条。
+
+        `]d` / `[d` 练的是「光标在诊断之间移动」——
+        只画当前那条，用户看不到「还有几条、分别在哪些行、
+        到头会不会绕回」。这些正是这一族最容易记错的地方。
+      */}
+      {isNavKey(k.key) ? (
+        <DiagNavView
+          source={SRC}
+          diags={sorted}
+          cursor={d.state.line}
+          note={d.flash?.text}
+        />
+      ) : (
+        <CodeView cur={cur} />
+      )}
 
       {/* 诊断列表 —— 这一页真正可视化的东西 */}
       <DiagList diags={sorted} curIndex={d.state.cur} />

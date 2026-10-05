@@ -32,6 +32,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { COMMANDS, GROUPS, type Command } from "@/lib/bindings";
+import { boardCoveredIds } from "@/lib/boards";
 import { splitLhs } from "@/lib/keys";
 import { SEQ_GROUPS, shapeOf, type Shape } from "@/lib/seq-groups";
 import { translate } from "@/lib/i18n";
@@ -64,8 +65,37 @@ import {
 const WINDOW_NAV =
   /^(Go to (Left|Right|Upper|Lower) Window|Split Window|Delete Window|Move (Up|Down)|(Increase|Decrease) Window)/;
 
-/** 可练的命令池 */
-const POOL: Command[] = COMMANDS.filter((c) => !WINDOW_NAV.test(c.desc));
+/**
+ * 可练的命令池 —— 「其余」键位的盲背。
+ *
+ * ## ⚠️ 要排除两层
+ *
+ * ### 1. 窗口键（一直都有）
+ *
+ * 交给 `/windows` 的可视化页面 —— 那里能画出真实分屏树。
+ *
+ * ### 2. 已被专门页面覆盖的族（这一版新增）
+ *
+ * 实测（见 `tests/dedup.test.ts`）这一页和专门页面**重复了 70 条**：
+ *
+ * ```
+ * <Space>u*  界面开关    24 条
+ * diag        诊断       18 条
+ * <Space>f*   文件查找    10 条
+ * buffers     缓冲区       8 条
+ * <Space><Tab>*  标签页     7 条
+ * ```
+ *
+ * 同一条命令在两个页面各练一遍 —— 进度 id 已经统一（练哪边都算），
+ * 但**题量虚高**，而且这一页叫「其余」就名不副实了。
+ *
+ * 判据在 `lib/boards.ts` 的 `boardCoveredIds()` —— 那里也定义了
+ * 每个板块拥有哪些键，所以加板块不用改这里。
+ */
+const POOL: Command[] = (() => {
+  const covered = boardCoveredIds(COMMANDS);
+  return COMMANDS.filter((c) => !WINDOW_NAV.test(c.desc) && !covered.has(c.id));
+})();
 
 /**
  * Command → DrillTask。

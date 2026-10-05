@@ -112,6 +112,15 @@ export const BOARDS: Board[] = [
     group: "diagnostics/quickfix",
   },
   {
+    id: "search",
+    href: "/search",
+    name: "搜索跳转",
+    what: "n / N 在匹配之间跳，以及 <Esc> 清高亮。核心是「方向感知」—— ? 倒着搜完之后 n 反而往前",
+    // 练的是 n / N / <Esc> 三条（见 app/search/drill.tsx 的题库）
+    total: 8,
+    group: "search",
+  },
+  {
     id: "seq",
     href: "/seq",
     name: "全键位扫描",
@@ -129,3 +138,80 @@ export const BOARDS: Board[] = [
 
 /** 按 id 查板块 */
 export const BOARD_BY_ID = new Map(BOARDS.map((b) => [b.id, b]));
+
+/* ------------------------------------------------------------------ 去重 */
+
+/**
+ * 各**专门页面**已经出的题，映射到全局命令 id。
+ *
+ * ## ⚠️ 为什么需要这个
+ *
+ * `/seq` 是「全键位扫描」，它的描述写的就是「**其余**全部键位」——
+ * 意思是已经有专门页面的族不该在这里重复出题。
+ *
+ * 但实测（见 tests/dedup.test.ts）它和专门页面**重复了 62 条**：
+ *
+ * ```
+ * <Space>u*   界面开关    24 条重复
+ * <Tab>*      标签页       7 条重复
+ * <Space>f*   文件查找    10 条重复
+ * buffers     缓冲区       3 条重复
+ * diag        诊断        18 条重复
+ * ```
+ *
+ * 后果：同一条命令在两个页面各练一遍（进度 id 已统一，但**题量虚高**），
+ * 而且 `/seq` 的「其余」名不副实。
+ *
+ * ## 判据
+ *
+ * 一个命令被专门页面覆盖 = 它的键（含次解）出现在那个板块的题库里。
+ *
+ * ⚠️ 只有**可视化板块**才算 —— `/seq` 自己不算（它就是要练「其余」的）。
+ */
+export function coveredByBoard(): Map<string, string> {
+  const m = new Map<string, string>(); // display → boardId
+  const add = (display: string, boardId: string) => {
+    if (!m.has(display)) m.set(display, boardId);
+  };
+
+  /**
+   * ⚠️ hydra 的题是**三段式** `<Space>wX`，不是裸面板键。
+   *
+   * 我第一版直接 `add(t.key)`，于是面板里的 `H` / `>` 把
+   * **全局**的 `H`（上一个 buffer）和 `>`（缩进）也标记成「被覆盖」——
+   * 这是两回事：面板键只在 `<Space><Space>` 进入面板后才存在，
+   * 不是全局映射（`lib/winkeys.ts` 里记过这条实测结论）。
+   *
+   * 所以只贡献完整三段式 `display`。
+   */
+  for (const t of WIN_TASKS) add(`<Space>w${t.key}`, "windows-hydra");
+  for (const t of BUF_TASKS) {
+    add(t.key, "buffers");
+    if (t.key.length > 1 && !t.key.startsWith("<")) add(`<Space>${t.key}`, "buffers");
+  }
+  for (const t of TAB_TASKS) add(`<Space>${t.key}`, "tabs");
+  for (const t of FILE_TASKS) add(t.key, "files");
+  for (const t of UI_TOGGLES) add(t.hasLeader ? `<Space>${t.key}` : t.key, "ui");
+  for (const k of DIAG_KEYS) add(k.hasLeader ? `<Space>${k.key}` : k.key, "diagnostics");
+
+  return m;
+}
+
+/**
+ * 这些命令已经有专门页面了（`display` 或次解命中就算）。
+ *
+ * `/seq` 用它过滤出题库 —— 返回的是**要排除的 id 集合**。
+ *
+ * ⚠️ 次解也要算：`H` 的次解 `[b` 如果出现在某个专门页面，
+ *    那 `H` 本身也该算被覆盖（它们同一条命令）。
+ */
+export function boardCoveredIds(commands: { id: string; display: string; alternates: string[] }[]): Set<string> {
+  const byDisplay = coveredByBoard();
+  const out = new Set<string>();
+  for (const c of commands) {
+    if (byDisplay.has(c.display) || c.alternates.some((a) => byDisplay.has(a))) {
+      out.add(c.id);
+    }
+  }
+  return out;
+}
