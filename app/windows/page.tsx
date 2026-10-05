@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import DrillShell from "@/app/drill-shell";
-import WindowsDrill from "./drill";
-import SplitDrill from "./split";
+import JumpDrill from "./jump";
+import BuildDrill from "./build";
 import HydraDrill from "./hydra";
 
 /**
@@ -68,7 +68,7 @@ export default function WindowsPage() {
       </p>
 
       <div className="mt-4">
-        {mode === "jump" ? <WindowsDrill /> : mode === "build" ? <SplitDrill /> : <HydraDrill />}
+        {mode === "jump" ? <JumpDrill /> : mode === "build" ? <BuildDrill /> : <HydraDrill />}
       </div>
     </DrillShell>
   );

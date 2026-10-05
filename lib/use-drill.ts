@@ -100,6 +100,49 @@ export type UseDrillOpts<S> = {
    * (起始状态已满足条件),引擎会**明确提示**,不会静默吞掉。
    */
   apply: (seq: string[], s: S, task: DrillTask) => S | NoEffect;
+  /**
+   * **终态判定** —— 让「多步探索」类板块也能用这个引擎。
+   *
+   * ## 为什么需要它
+   *
+   * 引擎原来的模型是「一题 = 一条固定键序列，命中 `accept` 即结算翻页」。
+   * 但 `/windows` 的 jump（把焦点移到目标窗口）和 build（搭出目标布局）
+   * 是**另一种形态**：
+   *
+   * | | 序列匹配（现有 6 个板块） | 终态判定（jump / build） |
+   * |---|---|---|
+   * | 一题几步 | 固定 1~3 键 | **不固定**（1 步到十几步） |
+   * | 正确答案 | 预先枚举的几条 | **取决于当前状态**，路径不唯一 |
+   * | 判据 | 键序列相等 | **状态是否达标** |
+   *
+   * 硬把 jump 塞进 `accept` 是不行的：一题有几十条等价路径，
+   * 枚举不完；而且枚举了也会「第一步就 hit 结算」，走不了多步。
+   *
+   * ## 语义
+   *
+   * 给了 `isSolved` 就进入**终态模式**：
+   *
+   * 1. `accept` 可以留空（不再用它判命中）
+   * 2. 每次按键都调用 `apply` 推进状态，**不立刻结算**
+   * 3. 推进后调 `isSolved(nextState)`；返回 true 才结算翻页
+   * 4. 首键接管范围用 `firstKeysOf` 算（因为有几步是动态的）
+   *
+   * @param s 推进后的新状态
+   * @param task 当前题目（板块要拿目标的，比如 build 的目标形状）
+   * @returns 达标了吗
+   */
+  isSolved?: (s: S, task: DrillTask) => boolean;
+  /**
+   * 终态模式下**接管哪些首键**。
+   *
+   * ⚠️ 只为 `isSolved` 模式准备 —— 序列匹配模式不用它
+   *    （那时接管范围从 `accept` 的首键算）。
+   *
+   * 为什么必须有：jump 的合法方向取决于**当前布局**
+   * （有的方向没窗口，那个键该放行给浏览器）。
+   * 全收会劫持 `h`/`j`/`k`/`l` 这些高频键，而它们在无映射时该正常输入。
+   */
+  firstKeysOf?: (task: DrillTask) => Set<string>;
   /** 浏览器 KeyboardEvent → 面板记法。返回 null = 这一键不归我管 */
   toPanelKey: (e: KeyboardEvent) => string | null;
   /** 本板块的「非解法但要接管」的键 */
@@ -189,6 +232,8 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     tasks,
     init,
     apply,
+    isSolved,
+    firstKeysOf,
     toPanelKey,
     extraAccept,
     onOther,
@@ -343,8 +388,12 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
   }, [tasks]);
 
   const firstKeys = useMemo(
-    () => mergeFirstKeys(...task.accept, ...(extraAccept ?? [])),
-    [task.accept, extraAccept],
+    () =>
+      // 终态模式：接管范围由板块自己给（因为合法性取决于当前状态）
+      firstKeysOf
+        ? firstKeysOf(task)
+        : mergeFirstKeys(...task.accept, ...(extraAccept ?? [])),
+    [task.accept, extraAccept, firstKeysOf, task],
   );
 
   /** 换题时清掉每题的状态 */
@@ -502,6 +551,88 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
       if (taskStart.current === null) taskStart.current = Date.now();
 
       const next = [...curBuf, k];
+
+      /**
+       * ⚠️ 终态模式（`isSolved` 给了）—— 走另一条路。
+       *
+       * 这是「多步探索」类板块（jump / build）的入口：
+       *
+       * 1. 每按一键都推进状态，**不立刻结算**
+       * 2. 推进后问 `isSolved(新状态)`，达标才结算
+       * 3. 用 `apply` 的返回值判「这一键有没有效果」
+       *
+       * 和序列匹配模式的关键差别：序列模式命中即翻页，
+       * 这里要**走完才算**。
+       */
+      if (isSolved) {
+        e.preventDefault();
+
+        /**
+         * ⚠️ 终态模式也可能有**多键序列**（build 的 `<Space>|` 是三键）。
+         *
+         * 所以不能每按一键就当成一次动作 —— 得先判断这一键属于：
+         *
+         * 1. **完整的动作**（jump 的 `<C-J>` 是单键）→ 直接推进
+         * 2. **序列的开头**（build 的 `<Space>`）→ 收下，等后续键
+         * 3. **序列的后续**（`|` 接在 `<Space>` 后面）→ 拼起来推进
+         * 4. 都不是 → 明确报错，不静默
+         */
+        const cur0 = taskRef.current;
+        const tryApply = (seq: string[]) => apply(seq, stateRef.current, cur0);
+
+        let used: string[] | null = null;
+        let out0 = tryApply([k]);
+
+        if (out0 !== NO_EFFECT) {
+          // 情况 1：单键就是完整动作
+          used = [k];
+        } else if (bufRef.current.length > 0) {
+          // 情况 3：接在缓冲后面
+          const withBuf = [...bufRef.current, k];
+          const outBuf = tryApply(withBuf);
+          if (outBuf !== NO_EFFECT) {
+            used = withBuf;
+            out0 = outBuf;
+          }
+        } else if (firstKeys.has(k)) {
+          /**
+           * 情况 2：这一键是**序列的开头**（在接管集里但单键无效）。
+           * 收下并等下一个键 —— 和序列模式的 prefix 语义一致。
+           */
+          setBuf([k]);
+          setKeyFeed((f) => pushFeed(f, 0, k, true));
+          setFlash({ ok: true, text: `${k} … 等下一个键` });
+          return;
+        }
+
+        if (used === null) {
+          // 情况 4：真的走不动 —— 明确提示，不静默
+          setBuf([]);
+          setKeyFeed((f) => pushFeed(f, 0, k, false));
+          setFlash({
+            ok: false,
+            text: noEffectText ? noEffectText([k]) : `${k} 这一步走不动`,
+          });
+          return;
+        }
+        // 到这里 out0 一定不是 NO_EFFECT（used 非 null 的前提）
+        if (out0 === NO_EFFECT) return;
+
+        setBuf([]);
+        setState(out0 as S);
+        setLog((l) => [...l, used.join("")]);
+        setKeyFeed((f) => pushFeed(f, used.length - 1, k, true));
+
+        if (isSolved(out0, cur0)) {
+          setFlash({ ok: true, text: `✓ ${cur0.desc}` });
+          commit(true);
+        } else {
+          // 还没到 —— 继续走，不翻页
+          setFlash({ ok: true, text: `${used.join("")} ……继续` });
+        }
+        return;
+      }
+
       const r = classify(task.accept, next);
 
       if (r.kind === "prefix") {

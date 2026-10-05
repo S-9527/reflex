@@ -276,3 +276,113 @@ describe("pushFeed —— 同一位置只留最新一条", () => {
     expect(b).toHaveLength(2);
   });
 });
+
+/**
+ * ⚠️ 终态模式（`isSolved`）—— 给「多步探索」类板块用。
+ *
+ * ## 为什么需要
+ *
+ * 引擎原来的模型是「一题 = 一条固定键序列，命中 accept 即结算翻页」。
+ * 但 `/windows` 的两族是**另一种形态**：
+ *
+ * | | 序列匹配 | 终态判定 |
+ * |---|---|---|
+ * | 一题几步 | 固定 1~3 键 | **不固定** |
+ * | 正确答案 | 预先枚举几条 | **取决于当前状态**，路径不唯一 |
+ * | 判据 | 键序列相等 | **状态是否达标** |
+ *
+ * 硬塞进 `accept` 不行：jump 一题有几十条等价路径，枚举不完；
+ * 而且枚举了也会「第一步就 hit 结算」，走不了多步。
+ *
+ * ## 这个测试守什么
+ *
+ * 复刻 `useDrill` 的**终态分支逻辑**，断言：
+ *   1. 中间步骤**不结算**（这是和序列模式的根本差别）
+ *   2. 达标才结算
+ *   3. 走不动的步骤要明确提示，不静默
+ */
+describe("终态模式（isSolved）", () => {
+  /** 模拟一个「走格子」的状态：从 0 走到 target */
+  type Pos = { at: number };
+  const TARGET = 3;
+
+  function engine() {
+    let state: Pos = { at: 0 };
+    let committed = 0;
+    let flash: { ok: boolean; text: string } | null = null;
+    /**
+     * 复刻引擎的终态分支：
+     *   apply 推进 → isSolved 判定 → 达标才 commit
+     */
+    function press(k: "R" | "L"): "stepped" | "solved" | "blocked" {
+      // apply：R 往右、L 往左；越界返回 NO_EFFECT
+      let out: Pos | null = null;
+      if (k === "R" && state.at < TARGET) out = { at: state.at + 1 };
+      if (k === "L" && state.at > 0) out = { at: state.at - 1 };
+      if (out === null) {
+        flash = { ok: false, text: `${k} 这一步走不动` };
+        return "blocked";
+      }
+      state = out;
+      if (state.at === TARGET) {
+        committed++;
+        flash = { ok: true, text: "✓ 到了" };
+        return "solved";
+      }
+      flash = { ok: true, text: `${k} ……继续` };
+      return "stepped";
+    }
+    return {
+      press,
+      get at() { return state.at; },
+      get committed() { return committed; },
+      get flash() { return flash; },
+    };
+  }
+
+  it("中间步骤**不结算**（和序列模式的根本差别）", () => {
+    const e = engine();
+    expect(e.press("R")).toBe("stepped");
+    expect(e.committed, "走了一步就结算了？那是序列模式的行为").toBe(0);
+    expect(e.press("R")).toBe("stepped");
+    expect(e.committed).toBe(0);
+  });
+
+  it("达标才结算", () => {
+    const e = engine();
+    e.press("R");
+    e.press("R");
+    expect(e.press("R")).toBe("solved");
+    expect(e.committed).toBe(1);
+    expect(e.at).toBe(TARGET);
+  });
+
+  it("走不动的步骤明确提示，不静默", () => {
+    const e = engine();
+    expect(e.press("L"), "起点往左走不动").toBe("blocked");
+    expect(e.flash!.ok).toBe(false);
+    expect(e.flash!.text).toContain("走不动");
+    expect(e.committed).toBe(0);
+  });
+
+  /** ⚠️ 多步探索：可以绕路，只要终态对 */
+  it("允许多走几步再回来（路径不唯一）", () => {
+    const e = engine();
+    e.press("R"); // 1
+    e.press("R"); // 2
+    e.press("L"); // 回 1
+    e.press("R"); // 2
+    e.press("R"); // 3 → 达标
+    expect(e.press("R"), "3 已到顶，再往右走不动").toBe("blocked");
+    expect(e.committed, "达标只结算一次").toBe(1);
+  });
+
+  it("步数不固定（这是 accept 枚举不出来的原因）", () => {
+    const a = engine();
+    a.press("R"); a.press("R"); a.press("R");
+    const b = engine();
+    b.press("R"); b.press("R"); b.press("L"); b.press("R"); b.press("R"); b.press("R");
+    expect(a.committed).toBe(1);
+    expect(b.committed, "绕路也能达标").toBe(1);
+  });
+});
