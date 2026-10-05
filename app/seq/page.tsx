@@ -7,7 +7,7 @@ import { buildIndex, match, type Binding } from "@/lib/matcher";
 import { load, save, record, pickNext, summarize, reset, type Progress } from "@/lib/progress";
 import { RAW, GROUPS } from "@/lib/bindings";
 import { SEQ_GROUPS, shapeOf, type Shape } from "@/lib/seq-groups";
-import KeyboardView, { useAutoAdvance } from "./keyboard-view";
+import { equivalentsOf, judge, solutionsFor, type DescSolution } from "@/lib/seq-solutions";
 import { translate } from "@/lib/i18n";
 
 // 数据集里 keys 留空(运行时用 splitLhs 展开),desc 换成中文
@@ -235,12 +235,26 @@ const pool = useMemo(
         setSeq(nextSeq);
 
         if (!r.extendable) {
-          if (r.binding.id === current?.id) {
-            commit(true, `✓ ${r.binding.display} — ${r.binding.desc}`);
+          /**
+           * ⚠️ 判「对」不能只认 id 相等。同一个命令在本机有多个键、
+           *   rhs 完全相同(H / [b 都是 BufferLineCyclePrev),
+           *   只认 id 的话按另一个键会被判错 —— 那就是
+           *   「训练器比真实环境挑剔」。判据见 lib/seq-solutions.judge。
+           */
+          const verdict = judge(current!, r.binding);
+          if (verdict === "exact") {
+            commit(true, `\u2713 ${r.binding.display} \u2014 ${r.binding.desc}`);
+          } else if (verdict === "equivalent") {
+            const alts = equivalentsOf(r.binding.display);
+            commit(
+              true,
+              `\u2713 ${r.binding.display} \u4e5f\u5bf9 \u2014\u2014 \u548c ${current!.display} \u662f\u540c\u4e00\u6761\u547d\u4ee4` +
+                (alts.length > 0 ? `(\u672c\u673a\u8fd8\u6709 ${alts.join(" / ")})` : ""),
+            );
           } else {
             commit(
               false,
-              `这个键是「${r.binding.desc}」,但本题要的是「${current?.desc}」`,
+              `\u8fd9\u4e2a\u952e\u662f\u300c${r.binding.desc}\u300d,\u4f46\u672c\u9898\u8981\u7684\u662f\u300c${current?.desc}\u300d`,
               [r.binding],
             );
           }
@@ -280,17 +294,18 @@ const countsByShape = useMemo(() => {
 const countOf = (s: Shape) => countsByShape[s] ?? 0;
 
   /**
-   * 键盘图的显示逻辑。
+   * 通关后展示「全部解法」。
    *
-   * ⚠️ **只在答完之后显示**(correct / wrong),答题时不给。
-   *   理由:键盘上直接亮出答案,就把盲背变成抄写。
-   *   但答完之后必须给 —— 光看一串文字记不住位置,
-   *   而位置恰恰是肌肉记忆的一半(qwerty 练习器就是练这个)。
+   * ⚠️ 答对(correct)时才显示 —— 答错时只给答案键,不给全部解法,
+   *   免得一眼抄走。答对了说明这题你已经会了,这时候把
+   *   同功能的其它键 + Vim 原生等价一次给全,才是「通关」的收获。
+   *
+   * 数据来自 lib/seq-solutions.ts:
+   *   keys   —— 按 desc 聚合,实测有 15 类真的存在多个键
+   *   native —— 我写的候选 + 逐条 exists() 实测存在性(73 条全部通过)
    */
-  const answerShown = phase === "correct" || phase === "wrong";
-  const answerTokens = current ? splitLhs(current.display) : [];
-  // 自动逐键前进,演示手指怎么走过去
-  const kbdAt = useAutoAdvance(answerTokens, answerShown);
+  const passed = phase === "correct";
+  const sol = current ? solutionsFor(current.display) : null;
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8 font-mono">
@@ -432,33 +447,8 @@ const countOf = (s: Shape) => countsByShape[s] ?? 0;
             </div>
           )}
 
-          {/* 键盘图 —— 答完(correct/wrong)才显示,见 KBD 说明 */}
-          {answerShown && (
-            <div className="mt-4 border-t border-neutral-800 pt-3">
-              <div className="mb-2 text-[11px] text-neutral-600">
-                按这个顺序走一遍(蓝 = 当前该按,绿 = 已按过)
-              </div>
-              <KeyboardView tokens={answerTokens} at={kbdAt} done={Math.max(0, kbdAt - 1)} />
-              <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px]">
-                {answerTokens.map((t, i) => (
-                  <span key={i} className="flex items-center gap-1">
-                    {i > 0 && <span className="text-neutral-700">→</span>}
-                    <kbd
-                      className={`rounded px-1.5 py-0.5 ${
-                        i === kbdAt
-                          ? "bg-blue-950 text-blue-200"
-                          : i < kbdAt
-                            ? "bg-green-950 text-green-400"
-                            : "bg-neutral-800 text-neutral-500"
-                      }`}
-                    >
-                      {t}
-                    </kbd>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* 通关 → 全部解法(同功能的其它键 + Vim 原生等价) */}
+          {passed && sol && <AllSolutions sol={sol} answer={current!.display} />}
         </div>
       ) : (
         <div className="rounded-lg border border-neutral-800 p-16 text-center text-neutral-600">
@@ -502,5 +492,89 @@ function LevelBtn({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * 通关后展示「全部解法」。
+ *
+ * ## 为什么是这个
+ *
+ * 一道题往往不只一个键能按。实测:`Prev Buffer` 有 `H` 和 `[b`,
+ * `Next Buffer` 有 `L` 和 `]b`,`Terminal (Root Dir)` 有 `<Space>ft` 和 `<C-/>`。
+ * 光记住一个键,遇到另一种按法就慌 —— 但**它们本来就是同一件事**。
+ *
+ * 所以答对之后一次给全:
+ *   1. 本机实测存在的其它等价键(按 desc 聚合,key 序列去重)
+ *   2. Vim 原生 Ex 等价 —— 我写的候选,再逐条 exists() 筛过
+ *
+ * ## 两栏的可信度不同,界面上标出来
+ *
+ * 「等价键」是纯数据(同样的聚合跑一遍就一样)。
+ * 「原生等价」是我判断的对应关系 + 存在性实测,所以写「我核实的」。
+ * 确认没有原生等价的,直接说明原因,不编一个假命令。
+ */
+function AllSolutions({ sol, answer }: { sol: DescSolution; answer: string }) {
+  const others = sol.keys.filter((k) => k !== answer);
+  return (
+    <div className="mt-4 border-t border-neutral-800 pt-3">
+      <div className="mb-2 text-[11px] text-neutral-600">这一题的全部解法</div>
+
+      {/* 本机实测存在的其它键 */}
+      {others.length > 0 ? (
+        <div className="flex flex-wrap items-baseline gap-2 text-[11px]">
+          <span className="w-12 shrink-0 text-neutral-700">等价键</span>
+          {sol.keys.map((k) => (
+            <kbd
+              key={k}
+              className={`rounded px-1.5 py-0.5 ${
+                k === answer
+                  ? "bg-blue-950 text-blue-200"
+                  : "bg-green-950 text-green-400"
+              }`}
+            >
+              {k.replace("<Space>", "S")}
+            </kbd>
+          ))}
+          <span className="text-neutral-600">
+            同一件事有 {sol.keys.length} 个键,按哪个都算对
+            {sol.modes.length > 0 && <> · 模式 {sol.modes.join("/")}</>}
+          </span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-baseline gap-2 text-[11px]">
+          <span className="w-12 shrink-0 text-neutral-700">等价键</span>
+          <span className="text-neutral-600">
+            本机只查到 <kbd className="rounded bg-blue-950 px-1.5 py-0.5 text-blue-200">{answer}</kbd>{" "}
+            这一个
+          </span>
+        </div>
+      )}
+
+      {/* Vim 原生等价 */}
+      <div className="mt-2 flex flex-wrap items-baseline gap-2 text-[11px]">
+        <span className="w-12 shrink-0 text-neutral-700">原生</span>
+        {sol.native ? (
+          <>
+            <code className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">{sol.native}</code>
+            <span className="text-neutral-700">
+              {sol.verified === true
+                ? "Ex 命令,我实测过 exists() 非 0;它没绑键,要手打 :"
+                : "Ex 命令(存在性没核实)"}
+            </span>
+          </>
+        ) : (
+          <span className="text-neutral-600">{sol.note ?? "插件功能,Vim 里没有原生等价"}</span>
+        )}
+      </div>
+
+      {/* 完整键位列表 —— 让「按哪条都行」看得见 */}
+      {sol.keys.length > 1 && (
+        <div className="mt-2 text-[10px] text-neutral-700">
+          按 rhs / desc 聚合自 <code>nvim_get_keymap(&quot;n&quot;)</code>:214 类 desc 里有 15 类
+          真的存在多个键做同一件事,这里就是其中之一。
+        </div>
+      )}
+    </div>
   );
 }
