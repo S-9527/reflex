@@ -34,7 +34,13 @@ import { useRouter } from "next/navigation";
 import { COMMANDS, GROUPS, type Command } from "@/lib/bindings";
 import { boardCoveredIds } from "@/lib/boards";
 import { splitLhs } from "@/lib/keys";
-import { SEQ_GROUPS, shapeOf, type Shape } from "@/lib/seq-groups";
+import {
+  OTHER_ID,
+  drillablePool,
+  filterByGroup,
+  groupOf,
+  skippedPool,
+} from "@/lib/seq-groups";
 import { translate } from "@/lib/i18n";
 import { formatMs } from "@/lib/session";
 import type { DrillTask } from "@/lib/drill";
@@ -68,34 +74,23 @@ const WINDOW_NAV =
 /**
  * 可练的命令池 —— 「其余」键位的盲背。
  *
- * ## ⚠️ 要排除两层
+ * 筛选规则在 `lib/seq-groups.ts`（有单测），这里只取结果：
  *
- * ### 1. 窗口键（一直都有）
+ * 1. **排除窗口键** —— 交给 `/windows`，那里能画出真实分屏树
+ * 2. **排除已被专门页面覆盖的** —— 不重复出题（见 lib/boards.ts）
+ * 3. **排除不能当题干的** —— 空 desc / help 引用 / auto-pairs
  *
- * 交给 `/windows` 的可视化页面 —— 那里能画出真实分屏树。
- *
- * ### 2. 已被专门页面覆盖的族（这一版新增）
- *
- * 实测（见 `tests/dedup.test.ts`）这一页和专门页面**重复了 70 条**：
- *
- * ```
- * <Space>u*  界面开关    24 条
- * diag        诊断       18 条
- * <Space>f*   文件查找    10 条
- * buffers     缓冲区       8 条
- * <Space><Tab>*  标签页     7 条
- * ```
- *
- * 同一条命令在两个页面各练一遍 —— 进度 id 已经统一（练哪边都算），
- * 但**题量虚高**，而且这一页叫「其余」就名不副实了。
- *
- * 判据在 `lib/boards.ts` 的 `boardCoveredIds()` —— 那里也定义了
- * 每个板块拥有哪些键，所以加板块不用改这里。
+ * 第 3 条是这一版新增的：旧版把空 desc 留在题库里，
+ * 于是会出**题干空白**的题 —— 那不是「简洁」，是坏了。
+ * 被排掉的在页面底部单独列出来，用户能看到「排除了什么、为什么」。
  */
-const POOL: Command[] = (() => {
-  const covered = boardCoveredIds(COMMANDS);
-  return COMMANDS.filter((c) => !WINDOW_NAV.test(c.desc) && !covered.has(c.id));
-})();
+const POOL: Command[] = drillablePool();
+
+/** 被排掉的（给底部那一栏） */
+const SKIPPED = skippedPool();
+
+/** 分组（按 which-key 的真实分类，「其它」兜底） */
+const GROUPS_UI = groupOf(POOL);
 
 /**
  * Command → DrillTask。
@@ -114,12 +109,19 @@ function toTask(c: Command): DrillTask {
 
 export default function SeqPage() {
   const router = useRouter();
-  const [shape, setShape] = useState<Shape | "all">("leader");
 
-  /** 当前形态下的命令 */
+  /**
+   * 当前分组（which-key 的 group 名，或 `__other__`）。
+   *
+   * ⚠️ 默认选**题量最大的真分组**，不是硬编码某个 id ——
+   *    以后 which-key 分组变了，默认项跟着变，不会指到一个空组。
+   */
+  const [groupId, setGroupId] = useState<string>(() => GROUPS_UI[0]?.id ?? OTHER_ID);
+
+  /** 当前分组下的命令 */
   const filtered = useMemo(
-    () => (shape === "all" ? POOL : POOL.filter((c) => shapeOf(c.display) === shape)),
-    [shape],
+    () => (groupId === "all" ? POOL : filterByGroup(POOL, groupId)),
+    [groupId],
   );
   const tasks = useMemo(() => filtered.map(toTask), [filtered]);
 
@@ -132,7 +134,7 @@ export default function SeqPage() {
   const apply = useCallback((_seq: string[], _s: null) => null, []);
 
   const d = useDrill<null>({
-    boardId: `seq-${shape}`,
+    boardId: `seq-${groupId}`,
     tasks,
     init: () => null,
     apply,
@@ -140,14 +142,6 @@ export default function SeqPage() {
   });
 
   const cmd = cmdOf.get(d.task.id) ?? null;
-  const shapeCounts = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const c of POOL) {
-      const s = shapeOf(c.display);
-      m[s] = (m[s] ?? 0) + 1;
-    }
-    return m;
-  }, []);
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8 font-mono">
@@ -160,38 +154,40 @@ export default function SeqPage() {
         全键位扫描 · 数据集来自本机 LazyVim 实测抽取（{POOL.length} 条命令；窗口键已移至可视化窗口练习）
       </p>
 
-      {/* 形态分组 —— 按「键长得像什么」分，不按「第 x 关」 */}
+      {/* 分组 —— 按 which-key 的真实分类，和你在 nvim 里按 <Space> 看到的一致 */}
       <div className="mt-4 space-y-2">
         <div className="flex flex-wrap gap-1.5">
-          {SEQ_GROUPS.map((g) => (
-            <ShapeBtn
+          {GROUPS_UI.map((g) => (
+            <GroupBtn
               key={g.id}
-              active={shape === g.shape}
+              active={groupId === g.id}
               onClick={() => {
-                setShape(g.shape);
-                d.restart(POOL.filter((c) => shapeOf(c.display) === g.shape).map((c) => c.id));
+                setGroupId(g.id);
+                d.restart(
+                  filterByGroup(POOL, g.id).map((c) => c.id),
+                );
               }}
             >
               {g.name}
-              <span className="ml-1.5 text-neutral-600">{shapeCounts[g.shape] ?? 0}</span>
-            </ShapeBtn>
+              <span className="ml-1.5 text-neutral-600">{g.count}</span>
+            </GroupBtn>
           ))}
-          <ShapeBtn
-            active={shape === "all"}
+          <GroupBtn
+            active={groupId === "all"}
             onClick={() => {
-              setShape("all");
+              setGroupId("all");
               d.restart(POOL.map((c) => c.id));
             }}
           >
             全部
             <span className="ml-1.5 text-neutral-600">{POOL.length}</span>
-          </ShapeBtn>
+          </GroupBtn>
         </div>
-        {shape !== "all" && (
-          <div className="text-[11px] text-neutral-500">
-            {SEQ_GROUPS.find((g) => g.shape === shape)?.what}
-          </div>
-        )}
+        <div className="text-[10px] text-neutral-700">
+          分组名来自 which-key 的 <code>group</code> 声明（LazyVim 的
+          <code>editor.lua</code>），和你在 nvim 里按 <code>&lt;Space&gt;</code>{" "}
+          看到的分类一致。「其它」是 which-key 没管的那批。
+        </div>
       </div>
 
       <div className="mt-4">
@@ -283,6 +279,52 @@ export default function SeqPage() {
         </DrillFlow>
       </div>
 
+      {/*
+        ⚠️ 「排除了什么」必须能看到。
+
+        这一版把 30 条不能当题干的键从练习池里排掉了（空 desc / help 引用 /
+        auto-pairs）。排掉不等于藏起来 —— 用户应该能核对这个判断，
+        而不是发现某些键「莫名其妙不见了」。
+      */}
+      {SKIPPED.length > 0 && (
+        <details data-skipped className="mt-8 rounded border border-neutral-800 bg-neutral-900/30 p-3">
+          <summary className="cursor-pointer text-[11px] text-neutral-500">
+            已排除 <b className="text-neutral-400">{SKIPPED.length}</b> 条不能当题干的键
+            <span className="ml-2 text-neutral-700">（点开看是什么、为什么）</span>
+          </summary>
+          <div className="mt-2 space-y-2">
+            {[
+              "没有描述（插件没上报 desc）",
+              "desc 是 help 引用，不是人话",
+              "auto-pairs 自动配对行为，不是要背的键位",
+              "MiniPairs 内部行为",
+            ].map((reason) => {
+              const list = SKIPPED.filter((x) => x.reason === reason);
+              if (list.length === 0) return null;
+              return (
+                <div key={reason} className="text-[11px]">
+                  <div className="text-neutral-500">
+                    {reason}
+                    <span className="ml-1.5 text-neutral-700">({list.length})</span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap gap-1.5">
+                    {list.map((x) => (
+                      <kbd
+                        key={x.command.id}
+                        className="rounded bg-neutral-800 px-1.5 py-0.5 font-mono text-neutral-500"
+                        title={x.command.desc || "(没有描述)"}
+                      >
+                        {x.command.display}
+                      </kbd>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+
       <div className="mt-8">
         <Provenance>
           判分只看键序列是否匹配。数据来自你本机的 <code>nvim_get_keymap</code>，
@@ -297,7 +339,7 @@ export default function SeqPage() {
   );
 }
 
-function ShapeBtn({
+function GroupBtn({
   active,
   onClick,
   children,

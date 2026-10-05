@@ -31,11 +31,14 @@ function seqPool() {
 }
 
 describe("去重效果", () => {
-  it("/seq 池子从 243 降到 173", () => {
-    expect(seqPool().length).toBe(173);
+  it("/seq 池子从 235 降到 165", () => {
+    // ⚠️ 数字随数据修正变过两次：
+    //    - 修正 `inWhichKey` 字段后，去重判据生效
+    //    - 合并 matchit 的 mode 变体（%）后，COMMANDS 少了 8 条
+    expect(seqPool().length).toBe(165);
   });
 
-  it("排除的 70 条都是真的被别的页面覆盖了", () => {
+  it("排除的都是真的被别的页面覆盖了", () => {
     const covered = boardCoveredIds(COMMANDS);
     const pool = COMMANDS.filter((c) => !WINDOW_NAV.test(c.desc));
     const excluded = pool.filter((c) => covered.has(c.id));

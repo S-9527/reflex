@@ -1,119 +1,197 @@
 import { describe, expect, it } from "vitest";
-import { RAW } from "../lib/bindings";
-import { SEQ_GROUPS, SHAPE_NAME, shapeOf } from "../lib/seq-groups";
+import {
+  drillablePool,
+  skippedPool,
+  groupOf,
+  filterByGroup,
+  whyNotDrillable,
+  OTHER_ID,
+} from "../lib/seq-groups";
+import { COMMANDS, GROUPS } from "../lib/bindings";
 
 /**
- * 分组判据的测试。
+ * `/seq` 的分组与筛选。
  *
- * ⚠️ 用户报「盲背的第 x 关这种分类,看起来很不清晰」。
- * 原来的 15 关是抽取脚本按 group 硬编号排的,彼此没有逻辑:
- * 第 9 关(4 条)排在第 4 关(5 条)后面,第 15 关只有 2 条。
- * 现在改成按**键的形态**分四类,所以每条都必须能归进去。
+ * ## 两件事
+ *
+ * 1. **分组按 which-key** —— 原来用「按键形态」（leader/ctrl/brackets/bare），
+ *    那只回答「键长什么样」，而用户脑子里是「这键干什么用」。
+ * 2. **排掉不能当题干的键** —— 空 desc、help 引用、auto-pairs。
+ *    旧版把空 desc 留在题库里，于是出现**题干空白**的题。
  */
 
-describe("shapeOf", () => {
-  it("leader 前缀", () => {
-    expect(shapeOf('<Space>s"')).toBe("leader");
-    expect(shapeOf("<Space>gb")).toBe("leader");
-    expect(shapeOf("<Space><Tab>d")).toBe("leader");
+describe("whyNotDrillable —— 什么键不能当题干", () => {
+  it("空 desc 不能出题（否则题干空白）", () => {
+    expect(whyNotDrillable({ desc: "" })).toBe("没有描述（插件没上报 desc）");
+    expect(whyNotDrillable({ desc: "   " })).toBe("没有描述（插件没上报 desc）");
   });
 
-  it("Ctrl 系列", () => {
-    expect(shapeOf("<C-H>")).toBe("ctrl");
-    expect(shapeOf("<C-w>d")).toBe("ctrl");
-    expect(shapeOf("<C-/>")).toBe("ctrl");
+  it("help 引用不能出题（题干会是 :help v_@-default）", () => {
+    expect(whyNotDrillable({ desc: ":help v_@-default" })).toContain("help 引用");
+    expect(whyNotDrillable({ desc: ":help &-default" })).toContain("help 引用");
   });
 
-  it("方括号跳转", () => {
-    expect(shapeOf("[d")).toBe("brackets");
-    expect(shapeOf("]q")).toBe("brackets");
-    expect(shapeOf("[a")).toBe("brackets");
+  it("auto-pairs 不能出题（那是自动配对，不是要背的键）", () => {
+    expect(whyNotDrillable({ desc: 'Open action for "()" pair' })).toContain("auto-pairs");
+    expect(whyNotDrillable({ desc: 'Close action for "[]" pair' })).toContain("auto-pairs");
+    expect(whyNotDrillable({ desc: 'Closeopen action for "``" pair' })).toContain("auto-pairs");
   });
 
-  it("裸键", () => {
-    expect(shapeOf("L")).toBe("bare");
-    expect(shapeOf("H")).toBe("bare");
-    expect(shapeOf("j")).toBe("bare");
+  it("MiniPairs 内部行为不能出题", () => {
+    expect(whyNotDrillable({ desc: "MiniPairs <BS>" })).toContain("MiniPairs");
   });
 
+  it("正常人话描述可以出题", () => {
+    for (const d of ["Next Buffer", "Toggle Line Numbers", ":bdelete", "Git Log"]) {
+      expect(whyNotDrillable({ desc: d }), `${d} 该能出题`).toBeNull();
+    }
+  });
+});
+
+describe("drillablePool —— 筛选后的池子", () => {
+  const pool = drillablePool();
+
+  it("池子里没有不能出题的", () => {
+    for (const c of pool) {
+      expect(whyNotDrillable(c), `${c.display} (${c.desc}) 不该在池子里`).toBeNull();
+    }
+  });
+
+  it("窗口键不在池子里", () => {
+    for (const c of pool) {
+      expect(c.desc, `${c.display} 是窗口键`).not.toMatch(/^(Go to .* Window|Split Window)/);
+    }
+  });
+
+  it("已被专门页面覆盖的不在池子里", () => {
+    // `]d` 属于 /diag，不该在 /seq 重复出题
+    expect(pool.some((c) => c.display === "]d")).toBe(false);
+    // `<Space>ua` 属于 /ui
+    expect(pool.some((c) => c.display === "<Space>ua")).toBe(false);
+  });
+
+  it("量级合理（不增不减太多）", () => {
+    expect(pool.length).toBeGreaterThan(100);
+    expect(pool.length).toBeLessThan(200);
+  });
+
+  it("池子没有重复 id", () => {
+    const ids = pool.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("skippedPool —— 被排掉的要有地方看", () => {
+  const skipped = skippedPool();
+
+  it("排掉的都有明确原因", () => {
+    for (const s of skipped) {
+      expect(s.reason, `${s.command.display} 缺原因`).toBeTruthy();
+    }
+  });
+
+  it("排掉 + 可练 = 去重后的全量", () => {
+    const pool = drillablePool();
+    expect(pool.length + skipped.length).toBeGreaterThan(0);
+    // 两个池子不重叠
+    const poolIds = new Set(pool.map((c) => c.id));
+    for (const s of skipped) {
+      expect(poolIds.has(s.command.id), `${s.command.display} 同时在两个池子里`).toBe(false);
+    }
+  });
+
+  it("四类原因都能对上（不是只有一个桶）", () => {
+    const reasons = new Set(skipped.map((s) => s.reason));
+    expect(reasons.size, "只出现了一种原因？判据可能写窄了").toBeGreaterThan(1);
+  });
+
+  it("排掉的条数在预期内", () => {
+    expect(skipped.length).toBeGreaterThan(20);
+    expect(skipped.length).toBeLessThan(60);
+  });
+});
+
+describe("groupOf —— 按 which-key 分组", () => {
+  const pool = drillablePool();
+  const groups = groupOf(pool);
+
+  it("真分组用的是 which-key 的分组名", () => {
+    const ids = groups.map((g) => g.id).filter((id) => id !== OTHER_ID);
+    for (const id of ids) {
+      expect(GROUPS[id], `${id} 不在 GROUPS 里`).toBeDefined();
+    }
+  });
+
+  it("真分组有多个（不是全挤在一个里）", () => {
+    const real = groups.filter((g) => g.id !== OTHER_ID);
+    expect(real.length).toBeGreaterThan(5);
+  });
+
+  it("兜底键合成一个「其它」，且排最后", () => {
+    const other = groups.find((g) => g.id === OTHER_ID);
+    if (other) {
+      expect(groups[groups.length - 1].id, "「其它」该排最后").toBe(OTHER_ID);
+      expect(other.name).toBe("其它");
+    }
+  });
+
+  it("各组条数之和 = 池子大小（不漏不重）", () => {
+    expect(groups.reduce((a, g) => a + g.count, 0)).toBe(pool.length);
+  });
+
+  it("真分组按题量降序", () => {
+    const real = groups.filter((g) => g.id !== OTHER_ID);
+    for (let i = 1; i < real.length; i++) {
+      expect(real[i - 1].count).toBeGreaterThanOrEqual(real[i].count);
+    }
+  });
+
+  it("每个分组都有名字", () => {
+    for (const g of groups) expect(g.name, `${g.id} 缺名字`).toBeTruthy();
+  });
+});
+
+describe("filterByGroup —— 取分组下的命令", () => {
+  const pool = drillablePool();
+
+  it("每个分组取出来的条数和 count 对得上", () => {
+    for (const g of groupOf(pool)) {
+      expect(filterByGroup(pool, g.id).length, `${g.id} 对不上`).toBe(g.count);
+    }
+  });
+
+  it("各分组取出来的合起来 = 池子（不重不漏）", () => {
+    const all = groupOf(pool).flatMap((g) => filterByGroup(pool, g.id));
+    expect(all.length).toBe(pool.length);
+    expect(new Set(all.map((c) => c.id)).size).toBe(pool.length);
+  });
+
+  it("「其它」取出来的是没有 which-key 分组的", () => {
+    for (const c of filterByGroup(pool, OTHER_ID)) {
+      expect(c.inWhichKey, `${c.display} 有 which-key 分组，不该在「其它」里`).toBe(false);
+    }
+  });
+
+  it("真分组取出来的是有 which-key 分组的", () => {
+    for (const g of groupOf(pool).filter((x) => x.id !== OTHER_ID)) {
+      for (const c of filterByGroup(pool, g.id)) {
+        expect(c.inWhichKey).toBe(true);
+        expect(c.group).toBe(g.id);
+      }
+    }
+  });
+});
+
+describe("which-key 分组字段", () => {
   /**
-   * ⚠️ 顺序有讲究的那几条。
-   * `<Space><Tab>x` 既是 leader 又含特殊键,但按「先按什么」归 leader。
+   * ⚠️ 回归测试。
+   *
+   * 我建 COMMANDS 时漏了 `inWhichKey` 字段，于是 `/seq` 想按 which-key
+   * 分类时读到的永远是 undefined —— 168 条真分组**全被判成兜底桶**。
    */
-  it("混合写法按前缀判定,不按后面那部分", () => {
-    expect(shapeOf("<Space><Tab>d")).toBe("leader");
-    expect(shapeOf("<C-w>d")).toBe("ctrl");
-  });
-
-  it("真实数据集里每条都能归进四类之一", () => {
-    // ⚠️ 比的是 SHAPE_NAME 的**键**(形态 id),不是它的值(中文名)。
-    //   我第一遍写成 values,于是「没有一项等于 'leader'」全红。
-    const shapes = new Set(Object.keys(SHAPE_NAME));
-    for (const r of RAW) {
-      expect(shapes.has(shapeOf(r.display)), `${r.display} 没归进任何一类`).toBe(true);
-    }
-  });
-
-  it("四条示例都判对了(防写反)", () => {
-    expect(shapeOf('<Space>s"')).toBe("leader");
-    expect(shapeOf("<C-H>")).toBe("ctrl");
-    expect(shapeOf("[d")).toBe("brackets");
-    expect(shapeOf("L")).toBe("bare");
-  });
-});
-
-describe("分组定义", () => {
-  it("四个组 id 唯一", () => {
-    expect(new Set(SEQ_GROUPS.map((g) => g.id)).size).toBe(SEQ_GROUPS.length);
-  });
-
-  it("每组都有名字和说明 —— 不能只写「第 x 关」", () => {
-    for (const g of SEQ_GROUPS) {
-      expect(g.name, `${g.id} 没名字`).toBeTruthy();
-      expect(g.what.length, `${g.id} 的说明太短`).toBeGreaterThan(10);
-      // 这正是用户报的问题:光秃秃一个编号
-      expect(g.name, `${g.id} 的名字不该是编号形式`).not.toMatch(/^第\s*\d+\s*关/);
-    }
-  });
-
-  it("每组都有唯一形态,四种都用到", () => {
-    const shapes = SEQ_GROUPS.map((g) => g.shape);
-    expect(new Set(shapes).size).toBe(shapes.length);
-    expect(new Set(shapes).size).toBe(4);
-  });
-
-  it("SHAPE_NAME 覆盖所有形态", () => {
-    for (const g of SEQ_GROUPS) expect(SHAPE_NAME[g.shape], `${g.shape} 没名字`).toBeTruthy();
-  });
-});
-
-describe("分组能覆盖全数据集,而且没有空组", () => {
-  /** 和页面一致的计数 */
-  function countBy() {
-    const m: Record<string, number> = {};
-    for (const r of RAW) {
-      const s = shapeOf(r.display);
-      m[s] = (m[s] ?? 0) + 1;
-    }
-    return m;
-  }
-
-  const counts = countBy();
-
-  it("每种形态都有条目 —— 不能有按钮点进去是空的", () => {
-    for (const g of SEQ_GROUPS) {
-      expect(counts[g.shape] ?? 0, `${g.name} 一条都没有`).toBeGreaterThan(0);
-    }
-  });
-
-  it("四组合计等于全数据集(没有漏网的)", () => {
-    const sum = SEQ_GROUPS.reduce((a, g) => a + (counts[g.shape] ?? 0), 0);
-    expect(sum).toBe(RAW.length);
-  });
-
-  it("每组条数都够练(少于 3 条就没必要单开一个按钮)", () => {
-    for (const g of SEQ_GROUPS) {
-      expect(counts[g.shape], `${g.name} 只有 ${counts[g.shape]} 条,不值得单开`).toBeGreaterThanOrEqual(3);
-    }
+  it("COMMANDS 上真的有 inWhichKey（而不是 undefined）", () => {
+    const withField = COMMANDS.filter((c) => typeof c.inWhichKey === "boolean");
+    expect(withField.length, "COMMANDS 缺 inWhichKey 字段").toBe(COMMANDS.length);
+    expect(COMMANDS.filter((c) => c.inWhichKey).length, "一条真分组都没有？").toBeGreaterThan(100);
   });
 });

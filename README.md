@@ -7,7 +7,7 @@ Neovim 肌肉记忆训练器。把本机 LazyVim 的真实键位抽出来，做�
 ```bash
 pnpm install
 pnpm dev          # http://localhost:3000
-pnpm vitest run   # 806 个测试
+pnpm vitest run   # 817 个测试
 npx tsc --noEmit  # 类型检查
 ```
 
@@ -151,6 +151,10 @@ type Item = {
 
 板块划分**来自 which-key 的真实分组**（LazyVim 的 `group = "..."` 声明），
 不是手编的「第 x 关」—— 所以分类和你按 `<Space>` 看到的面板一致。
+
+`/seq` 也一样：真分组按 which-key，兜底键合成「其它」。
+不能当题干的键（空 desc / help 引用 / auto-pairs）会被排掉，
+但页面底部单独列出来，能看到排除了什么、为什么。
 
 ---
 

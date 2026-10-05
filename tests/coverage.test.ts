@@ -64,8 +64,15 @@ describe("RAW → COMMANDS：95 条没有独立命令，但原因都正当", () 
   }
   const uncovered = RAW.filter((r) => !covered.has(r.id));
 
+  /**
+   * ⚠️ 这个数随数据修正变过：95 → 103。
+   *
+   * 原因：合并了 matchit 的 mode 变体（`%` 在 n/v/o 三条 rhs 归一成一条），
+   * 于是那些 mode 的键不再有**独立命令** —— 但这是**对的**，
+   * 它们本来就是同一条命令。
+   */
   it("未覆盖的条数在预期内（不增不减）", () => {
-    expect(uncovered.length).toBe(95);
+    expect(uncovered.length).toBe(103);
   });
 
   it("未覆盖的都有正当理由：空 desc 或跨 mode 合并", () => {

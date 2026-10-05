@@ -195,7 +195,26 @@ for (const r of src.keys) {
  * 第三种必须单独处理：若也按 desc 聚合，**所有无描述的键会合并成一道题**。
  */
 function commandKey(b) {
-  if (!b.lua && b.rhs.trim()) return { key: `rhs|${b.rhs}`, by: "rhs" };
+  if (!b.lua && b.rhs.trim()) {
+    /**
+     * ⚠️ 有些插件按 mode 把**同一件事**桥接到不同的 `<Plug>` 上。
+     *
+     * 实测 matchit：
+     * ```
+     * %  n  <Plug>(MatchitNormalForward)
+     * %  v  <Plug>(MatchitVisualForward)
+     * %  o  <Plug>(MatchitOperationForward)
+     * ```
+     * 三条 rhs 不同 → 按原样聚合会出**三道题**，
+     * 而它们对用户就是「跳到配对的括号」一件事。
+     *
+     * 所以把 `(XxxNormal|Visual|Operation|Select)` 这类**模式前缀**
+     * 归一化掉再聚合。模式信息不丢 —— 它记在 `modes` 数组里。
+     */
+    const MODE_PREFIX = new RegExp("\\\\?(Matchit|Textobj|Repeat)(Normal|Visual|Operation|Select|Op)", "g");
+    const normalized = b.rhs.replace(MODE_PREFIX, "$1");
+    return { key: `rhs|${normalized}`, by: "rhs" };
+  }
   if (b.desc) return { key: `desc|${b.desc}`, by: "desc" };
   return { key: `lone|${b.id}`, by: "lone" };
 }
@@ -372,6 +391,16 @@ for (const [, { by, members }] of byCommand) {
     modes: [...new Set(members.map((m) => m.mode))].sort(),
     group: best.group,
     groupLabel: best.groupLabel,
+    /**
+     * 这条命令落在 which-key 的分组树里吗。
+     *
+     * ⚠️ 我建 COMMANDS 时漏了这个字段，而 `/seq` 想按 which-key 分类
+     *    时读 `c.inWhichKey` 永远是 undefined —— 于是 173 条全被判成
+     *    「兜底桶」。RAW 上有 208 条是真分组，这里必须一起带上。
+     */
+    inWhichKey: best.inWhichKey,
+    /** which-key 的原始分组名（`true` = 插件自动推断的） */
+    wkGroup: best.wkGroup ?? null,
     /** 次解：实测同一条命令的其它键。仅展示，不出题 */
     alternates: alternates.map((a) => a.display),
     /** 等价判据的可信度：rhs = 严格，desc = 弱，lone = 没聚合 */
@@ -464,6 +493,10 @@ export type Command = {
   modes: string[];
   group: string;
   groupLabel: string;
+  /** 是否落在 which-key 的分组树里（/seq 按它区分「真分组」和「兜底桶」） */
+  inWhichKey: boolean;
+  /** which-key 的原始分组名。true = 插件自动推断的 */
+  wkGroup: string | true | null;
   /** 次解：实测同一条命令的其它键。仅展示 */
   alternates: string[];
   /** 等价判据：rhs = 严格实测，desc = 弱（Lua 回调只能按描述归类），lone = 没聚合 */

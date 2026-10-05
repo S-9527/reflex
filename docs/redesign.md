@@ -977,6 +977,69 @@ script -qec "nvim --headless -c 'luafile scripts/probe-nav.lua' -c 'qa!'" /dev/n
 
 不标的话用户会把两族混成一个心智模型，而它们**确实不一样**。
 
+### `/seq` 改成 which-key 分类
+
+**起因**：`/seq` 原来用「按键形态」分组（leader / ctrl / brackets / bare）。
+那个分法只回答「这键长什么样」，而用户脑子里是「这键干什么用」——
+which-key 面板里看到的正是后者。
+
+现在真分组直接用 which-key 的 `group`，兜底键合成「其它」：
+
+```
+搜索 32 · Git 14 · 上一个 14 · 下一个 13 · 跳转 8
+代码/LSP 5 · 文件查找 5 · 退出/会话 5 · 性能分析 3
+缓冲区 1 · 诊断/quickfix 1 · 其它 34 · 全部 135
+```
+
+兜底键（63 条）原来分成 insert / visual / ctrl-misc / leader-misc /
+bare / other / operator 七桶，七个小桶各自成按钮意义不大，
+合成「其它」更好用 —— 它们本来就是「which-key 没管的那批」。
+
+#### ⚠️ 修掉一个真 bug：`COMMANDS` 漏了 `inWhichKey` 字段
+
+想按 which-key 分类时发现：`c.inWhichKey` **永远是 `undefined`** ——
+173 条**全被判成兜底桶**，包括本该是真分组的 `search` / `git` / `goto`。
+
+根因：我建 `COMMANDS` 时没把 `inWhichKey` / `wkGroup` 带过去
+（`RAW` 上有 208 条是真分组，`COMMANDS` 上是 0）。
+
+#### ⚠️ 修掉一个聚合漏洞：matchit 的 mode 变体
+
+`%` / `g%` / `[%` / `]%` 各出了 **3 道题**（在 n/v/o 各注册一条），
+因为 matchit 把同一件事按 mode 桥接到不同的 `<Plug>` 上：
+
+```
+%  n  <Plug>(MatchitNormalForward)
+%  v  <Plug>(MatchitVisualForward)
+%  o  <Plug>(MatchitOperationForward)
+```
+
+三条 rhs 不同 → 按原样聚合不会合并。但它们对用户就是
+「跳到配对的括号」**一件事**。
+
+所以聚合时把 `(Matchit|Textobj|Repeat)(Normal|Visual|Operation|Select|Op)`
+这类**模式前缀**归一化掉。模式信息不丢 —— 它记在 `modes` 数组里。
+
+命令数 **260 → 252**。
+
+### 排掉不能当题干的键（但看得到）
+
+`/seq` 池子里有 30 条**没法当题干**：
+
+| 原因 | 例 |
+|------|-----|
+| 没有描述 | `%` `,` `;`（插件没上报 desc） |
+| desc 是 help 引用 | `@` → `:help v_@-default` |
+| auto-pairs 自动配对 | `(` → `Open action for "()" pair` |
+| MiniPairs 内部行为 | `<BS>` → `MiniPairs <BS>` |
+
+⚠️ 旧版把「空 desc」留在题库里，于是会出**题干空白**的题 ——
+那不是「简洁」，是坏了。
+
+**排掉不等于藏起来**：页面底部有一栏「已排除 N 条」，
+点开能看到具体是哪些键、以及各自为什么被排除。
+用户应该能核对这个判断，而不是发现某些键「莫名其妙不见了」。
+
 ### `/windows` 的 jump/build 仍未并入
 
 那是另外两套独立实现（**710 行**，没走公共引擎），
