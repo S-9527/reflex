@@ -20,6 +20,7 @@ import {
   type Diag,
   type DiagKey,
 } from "@/lib/diagnostics";
+import { ORIGIN_NOTE, VERIFIED_NOTE } from "@/lib/provenance";
 import type { DrillTask } from "@/lib/drill";
 import { defaultToPanelKey, NO_EFFECT, useDrill } from "@/lib/use-drill";
 import {
@@ -199,9 +200,43 @@ export default function DiagDrill() {
           按 <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{fullKey(k)}</kbd>{" "}
           {movesCursor(k) ? "把光标移到下一个位置" : k.block === "面板" ? "打开面板" : "问语言服务器一个问题"}
         </div>
-        <div className="mt-1 text-neutral-500">{k.acts}</div>
-        <div className="mt-1 text-[11px] text-neutral-600">
-          本机实测:desc = <span className="text-neutral-400">{k.desc}</span>
+        <div className="mt-1.5 text-neutral-400">{k.acts}</div>
+
+        {/* 归属:Vim 原生还是插件 */}
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-[11px]">
+          <span className="w-8 shrink-0 text-neutral-700">归属</span>
+          <span
+            className={
+              k.origin.startsWith("纯插件")
+                ? "rounded bg-purple-950 px-1.5 py-0.5 text-purple-300"
+                : "rounded bg-green-950 px-1.5 py-0.5 text-green-400"
+            }
+          >
+            {k.origin}
+          </span>
+          <span className="text-neutral-600">{ORIGIN_NOTE[k.origin]}</span>
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-[11px]">
+          <span className="w-8 shrink-0 text-neutral-700">核实</span>
+          <span
+            className={
+              k.verified === "desc"
+                ? "text-amber-500/90"
+                : k.verified === "none"
+                  ? "text-red-400"
+                  : "text-neutral-400"
+            }
+          >
+            {VERIFIED_NOTE[k.verified]}
+          </span>
+        </div>
+
+        <div className="mt-1.5 text-[11px] text-neutral-600">
+          实测 lhs ={" "}
+          <code className="text-neutral-500">&quot;{k.hasLeader ? " " : ""}{k.key}&quot;</code>
+          {k.hasLeader ? "(前导空格 = leader)" : "(不带 leader)"};desc ={" "}
+          <span className="text-neutral-400">{k.desc}</span>
           {k.rhs !== null && (
             <>
               ;rhs = <span className="text-green-500/90">{k.rhs}</span>
@@ -266,7 +301,15 @@ export default function DiagDrill() {
                 >
                   <code className="w-20 shrink-0 text-blue-300">{fullKey(x)}</code>
                   <span className="truncate">{x.acts}</span>
-                  {x.rhs !== null && <span className="shrink-0 text-green-600/60">Ex</span>}
+                  <span
+                    className={
+                      x.origin.startsWith("纯插件")
+                        ? "shrink-0 text-purple-600/70"
+                        : "shrink-0 text-green-600/60"
+                    }
+                  >
+                    {x.origin.startsWith("纯插件") ? "插件" : "原生"}
+                  </span>
                 </div>
               ))}
             </div>

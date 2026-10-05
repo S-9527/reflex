@@ -13,6 +13,7 @@ import {
   sortedDiags,
   type Diag,
 } from "../lib/diagnostics";
+import { MEASURED_API, ORIGIN_NOTE } from "../lib/provenance";
 
 describe("数据完整性", () => {
   it("key 唯一", () => {
@@ -268,6 +269,57 @@ describe("跳转模型", () => {
   it("面板类键也不移动光标", () => {
     for (const k of DIAG_KEYS.filter((x) => x.block === "面板")) {
       expect(movesCursor(k), `${k.key} 被误当成移动光标`).toBe(false);
+    }
+  });
+});
+describe("测不出来也要说清作用和归属", () => {
+  /**
+   * ⚠️ 用户提的问题:不能只写「未实测」就算完。
+   *   测不出「画面长什么样」不等于说不出「这个键干什么」。
+   */
+  it("每条都有 acts / origin / verified", () => {
+    for (const k of DIAG_KEYS) {
+      expect(k.origin, `${k.key} 缺 origin`).toBeTruthy();
+      expect(k.verified, `${k.key} 缺 verified`).toBeTruthy();
+      expect(k.acts.length, `${k.key} 的 acts 太短`).toBeGreaterThan(8);
+    }
+  });
+
+  it("origin 用受控词表", () => {
+    const allowed = new Set(Object.keys(ORIGIN_NOTE));
+    for (const k of DIAG_KEYS) {
+      expect(allowed.has(k.origin), `${k.key} 的 origin "${k.origin}" 不在词表里`).toBe(true);
+    }
+  });
+
+  it("verified=rhs 的必须真的有 rhs;标 desc 的必须没有", () => {
+    for (const k of DIAG_KEYS) {
+      if (k.verified === "rhs") expect(k.rhs, `${k.key} 标了 rhs 却没填`).toBeTruthy();
+      if (k.verified === "desc") expect(k.rhs, `${k.key} 标了只有 desc 却有 rhs`).toBeNull();
+    }
+  });
+
+  /**
+   * gr* 六个键声称是 Neovim API —— 那就必须真的在实测清单里。
+   * 这是防「嘴上说核实了」的闸。
+   */
+  it("gr* 声称的 vim.lsp.buf API 都在实测清单里", () => {
+    for (const k of DIAG_KEYS.filter((x) => /^gr/.test(x.key))) {
+      const fn = k.desc.replace("vim.lsp.buf.", "").replace("()", "");
+      const full = `vim.lsp.buf.${fn}` as never;
+      expect(MEASURED_API, `${k.key} 声称的 ${String(full)} 不在实测清单里`).toContain(full);
+    }
+  });
+
+  it("Trouble 族标 rhs 的,实测 Ex 命令确实含 Trouble", () => {
+    for (const k of DIAG_KEYS.filter((x) => x.verified === "rhs")) {
+      expect(k.rhs, `${k.key} 的 rhs 里没有 Trouble`).toMatch(/Trouble/);
+    }
+  });
+
+  it("面板族全部是插件功能 —— Trouble 不是 Vim/Neovim 自带", () => {
+    for (const k of DIAG_KEYS.filter((x) => x.block === "面板")) {
+      expect(k.origin, `${k.key} 是 Trouble 面板,不该标成原生`).toBe("纯插件功能(无原生等价)");
     }
   });
 });

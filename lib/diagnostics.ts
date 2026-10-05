@@ -1,4 +1,5 @@
 import { splitLhs } from "./keys";
+import type { Origin, Verified } from "./provenance";
 
 /**
  * 诊断 / LSP 跳转 —— 这一族的数据与模型。
@@ -107,6 +108,16 @@ export type DiagKey = {
   /** 这个键在页面模型里做什么 */
   acts: string;
   /**
+   * 这个键属于 Vim 原生还是插件 —— 核实过,不是凭印象。
+   *
+   * ⚠️ 这一族的 `gr*` desc **实测原文**就是 `vim.lsp.buf.xxx()`,
+   *   所以「做什么」有 desc 支撑;「属于谁」也是我逐条查了
+   *   `exists()` / API 非 nil 之后写的。见 lib/provenance.ts。
+   */
+  origin: Origin;
+  /** 我核实到哪一层。「存在」≠「这个键确实改它」,我只核实了存在性 */
+  verified: Verified;
+  /**
    * 实测存在的**等价键**列表。
    *
    * 每条只写 leader **之后**的部分(和 `key` 同一个约定),
@@ -213,48 +224,60 @@ export const DIAG_KEYS: DiagKey[] = [
     hasLeader: false,
     desc: "Next Diagnostic",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "诊断间跳转",
-    acts: "下一条诊断",
+    acts: "跳到下一个诊断;等价 vim.diagnostic.jump({count=1})(Neovim 自带 API)",
   },
   {
     key: "[d",
     hasLeader: false,
     desc: "Prev Diagnostic",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "诊断间跳转",
-    acts: "上一条诊断",
+    acts: "跳到上一个诊断(Neovim 自带 vim.diagnostic.jump({count=-1}))",
   },
   {
     key: "]D",
     hasLeader: false,
     desc: "Jump to the last diagnostic in the current buffer",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "desc",
     block: "诊断间跳转",
-    acts: "当前 buffer 最后一条诊断",
+    acts: "直接跳到当前 buffer 最后一条诊断",
   },
   {
     key: "[D",
     hasLeader: false,
     desc: "Jump to the first diagnostic in the current buffer",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "desc",
     block: "诊断间跳转",
-    acts: "当前 buffer 第一条诊断",
+    acts: "直接跳到当前 buffer 第一条诊断",
   },
   {
     key: "]q",
     hasLeader: false,
     desc: "Next Trouble/Quickfix Item",
     rhs: null,
+    origin: "纯插件功能(无原生等价)",
+    verified: "opt",
     block: "列表项跳转",
-    acts: "Trouble/quickfix 列表下一项",
+    acts: "在 Trouble / quickfix 列表里下一项;等价 :cnext",
   },
   {
     key: "[q",
     hasLeader: false,
     desc: "Previous Trouble/Quickfix Item",
     rhs: null,
+    origin: "纯插件功能(无原生等价)",
+    verified: "opt",
     block: "列表项跳转",
-    acts: "Trouble/quickfix 列表上一项",
+    acts: "在 Trouble / quickfix 列表里上一项;等价 :cprevious",
   },
 
   // ---- 跳转块:gr* 助记族 ----
@@ -264,48 +287,60 @@ export const DIAG_KEYS: DiagKey[] = [
     hasLeader: false,
     desc: "vim.lsp.buf.references()",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "LSP 查询",
-    acts: "所有引用处",
+    acts: "列出这个符号的所有引用处(Neovim 自带 vim.lsp.buf.references)",
   },
   {
     key: "grn",
     hasLeader: false,
     desc: "vim.lsp.buf.rename()",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "LSP 查询",
-    acts: "重命名符号",
+    acts: "重命名整个文件里所有用到它的地方(Neovim 自带 vim.lsp.buf.rename)",
   },
   {
     key: "gra",
     hasLeader: false,
     desc: "vim.lsp.buf.code_action()",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "LSP 查询",
-    acts: "代码操作(修复建议)",
+    acts: "给出可执行的操作建议,比如「补上缺失的局部变量」(Neovim 自带 vim.lsp.buf.code_action)",
   },
   {
     key: "gri",
     hasLeader: false,
     desc: "vim.lsp.buf.implementation()",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "LSP 查询",
-    acts: "实现定义",
+    acts: "跳到这个接口/抽象方法的具体实现(Neovim 自带 vim.lsp.buf.implementation)",
   },
   {
     key: "grt",
     hasLeader: false,
     desc: "vim.lsp.buf.type_definition()",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "LSP 查询",
-    acts: "类型定义",
+    acts: "跳到这个变量的类型定义(Neovim 自带 vim.lsp.buf.type_definition)",
   },
   {
     key: "gO",
     hasLeader: false,
     desc: "vim.lsp.buf.document_symbol()",
     rhs: null,
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     block: "LSP 查询",
-    acts: "整个文件的符号表",
+    acts: "列出整个文件的符号列表(Neovim 自带 vim.lsp.buf.document_symbol)",
   },
 
   // ---- 面板块:弹 Trouble ----
@@ -315,8 +350,10 @@ export const DIAG_KEYS: DiagKey[] = [
     hasLeader: true,
     desc: "Diagnostics (Trouble)",
     rhs: "<Cmd>Trouble diagnostics toggle<CR>",
+    origin: "纯插件功能(无原生等价)",
+    verified: "rhs",
     block: "面板",
-    acts: "诊断列表",
+    acts: "打开 Trouble 的诊断列表(实测 rhs 就是 Trouble 命令)",
     // 实测同 rhs 的等价键(leader 之后的部分)
     alts: ["sd", "sD"],
   },
@@ -325,8 +362,10 @@ export const DIAG_KEYS: DiagKey[] = [
     hasLeader: true,
     desc: "Quickfix List (Trouble)",
     rhs: "<Cmd>Trouble qflist toggle<CR>",
+    origin: "纯插件功能(无原生等价)",
+    verified: "rhs",
     block: "面板",
-    acts: "quickfix 列表",
+    acts: "打开 quickfix 列表(实测 rhs 是 Trouble qflist toggle)",
     // 实测 xq 也是 quickfix(rhs=nil 回调)
     alts: ["xq"],
   },
@@ -335,24 +374,30 @@ export const DIAG_KEYS: DiagKey[] = [
     hasLeader: true,
     desc: "Location List (Trouble)",
     rhs: "<Cmd>Trouble loclist toggle<CR>",
+    origin: "纯插件功能(无原生等价)",
+    verified: "rhs",
     block: "面板",
-    acts: "location list",
+    acts: "打开 location list(实测 rhs 是 Trouble loclist toggle)",
   },
   {
     key: "xX",
     hasLeader: true,
     desc: "Buffer Diagnostics (Trouble)",
     rhs: "<Cmd>Trouble diagnostics toggle filter.buf=0<CR>",
+    origin: "纯插件功能(无原生等价)",
+    verified: "rhs",
     block: "面板",
-    acts: "只看当前 buffer 的诊断",
+    acts: "只显示当前 buffer 的诊断(实测 rhs 带 filter.buf=0)",
   },
   {
     key: "xT",
     hasLeader: true,
     desc: "Todo/Fix/Fixme (Trouble)",
     rhs: null,
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     block: "面板",
-    acts: "TODO/FIX/FIXME 列表",
+    acts: "打开 TODO / FIXME 注释列表",
     // 实测 xt 也是 todo
     alts: ["xt"],
   },
@@ -361,8 +406,10 @@ export const DIAG_KEYS: DiagKey[] = [
     hasLeader: true,
     desc: "LSP references/definitions/... (Trouble)",
     rhs: "<Cmd>Trouble lsp toggle<CR>",
+    origin: "纯插件功能(无原生等价)",
+    verified: "rhs",
     block: "面板",
-    acts: "LSP 各类跳转结果",
+    acts: "打开 LSP 各类跳转结果的列表(实测 rhs 是 Trouble lsp toggle)",
   },
 ];
 
