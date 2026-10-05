@@ -8,6 +8,7 @@ import { TAB_TASKS } from "@/lib/tabs";
 import { FILE_TASKS } from "@/lib/files";
 import { SPEC } from "@/lib/textobj";
 import { UI_TOGGLES } from "@/lib/ui-toggles";
+import { DIAG_KEYS } from "@/lib/diagnostics";
 import { RAW } from "@/lib/bindings";
 import { loadBoards, boardSummary, clearBoard, saveBoards, type BoardProgress } from "@/lib/board-progress";
 import { load as loadSeq, reset as resetSeq, summarize, type Progress } from "@/lib/progress";
@@ -123,6 +124,19 @@ const BOARDS: Board[] = [
       </>
     ),
     total: UI_TOGGLES.length,
+    kind: "board",
+  },
+  {
+    id: "diagnostics",
+    href: "/diag",
+    name: "诊断与 LSP",
+    what: (
+      <>
+        <K>[d</K> <K>]d</K> <K>[D</K> <K>]D</K> 让光标在诊断间移动,加上{" "}
+        <K>gr*</K> 六个 LSP 查询。⚠️ <K>gd</K> 是 Git diff,不是跳定义
+      </>
+    ),
+    total: DIAG_KEYS.length,
     kind: "board",
   },
   {
