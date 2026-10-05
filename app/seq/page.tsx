@@ -5,7 +5,8 @@ import { normalize, splitLhs, firstKeySet, excludeFirstKeys } from "@/lib/keys";
 import { shouldTake, push, type LeaderState } from "@/lib/leader";
 import { buildIndex, match, type Binding } from "@/lib/matcher";
 import { load, save, record, pickNext, summarize, reset, type Progress } from "@/lib/progress";
-import { RAW, GROUPS, LEVEL_NAMES } from "@/lib/bindings";
+import { RAW, GROUPS } from "@/lib/bindings";
+import { SEQ_GROUPS, shapeOf, type Shape } from "@/lib/seq-groups";
 import { translate } from "@/lib/i18n";
 
 // 数据集里 keys 留空(运行时用 splitLhs 展开),desc 换成中文
@@ -30,7 +31,7 @@ const INDEX = buildIndex(BINDINGS);
  * 首页只能让你盲背序列。**只是不在这儿出题,数据集本身不动**,
  * 所以 /stats 的统计和已记录的进度都不受影响。
  */
-const TRAINABLE = BINDINGS.filter((b) => b.level !== 1);
+const TRAINABLE = BINDINGS.filter((b) => b.group !== "window");
 
 /**
  * 只接管「数据集里可能作为第一键」的按键。
@@ -79,7 +80,16 @@ const typed = seq.typed;
   shaky: 0,
   fresh: TRAINABLE.length,
 });
-  const [level, setLevel] = useState<number | "all">(1);
+  /**
+   * ⚠️ 默认必须是一个**真的有题**的档。
+   *
+   * 原来是 `useState(1)`,而第 1 关(窗口)被排除在池子外 ——
+   * 于是 pool 算出空数组,页面顶上直接写「0 条」,而按钮区
+   * 从「第 2 关」开始,一眼看着像坏���。
+   *
+   * 两个 bug 一起修:默认给 leader(量最大的那组),按钮不再从 2 起。
+   */
+  const [level, setLevel] = useState<Shape | "all">("leader");
   // 牺牲 <Tab> 键换键盘焦点导航。数据集里有一条 <Tab>(snippet 跳转),
   // 接管它就意味着 Tab 不再移动焦点 —— 所以做成可选,而不是替你决定。
   const [keepTabNav, setKeepTabNav] = useState(false);
@@ -101,7 +111,10 @@ const typed = seq.typed;
 // 对肌肉记忆没有额外收益,反而和可视化页面重复。
 // 注意是「过滤」而不是删数据集:/stats 仍会统计它们,进度不丢。
 const pool = useMemo(
-    () => (level === "all" ? TRAINABLE : TRAINABLE.filter((b) => b.level === level)),
+    () =>
+      level === "all"
+        ? TRAINABLE
+        : TRAINABLE.filter((b) => shapeOf(b.display) === level),
     [level],
   );
   // poolRef:让 next() 读最新 pool,同时保持 next 的引用稳定。
@@ -254,17 +267,16 @@ const pool = useMemo(
     };
   }, [seq, current, phase, pool, commit]);
 
-  // ⚠️ 必须从 **pool** 推,不能从 BINDINGS 推。
-// 否则「全部」那一档会把第 1 关的按钮显示出来,点进去发现一道题都没有。
-// ⚠️ levels 必须从 **BINDINGS** 算,不能从 pool 算。
-// pool 会排除第 1 关(那是刻意的),若 levels 也跟着排除,
-// 「全部」那一档就会算成 0 —— 实测踩到:按钮显示「全部(0)」,
-// 一道题都没有。关卡列表是"有哪些关卡",和"当前档出哪些题"是两件事。
-// ⚠️ 两处刻意用不同的数据源,别"顺手统一":
-//   levels ← BINDINGS  (有哪些关卡按钮)
-//   pool   ← 过滤掉 1  (实际出题,窗口键交给 /windows)
-// 早期版本让 levels 也从 pool 算,结果「全部」显示 0 题。
-const levels = useMemo(() => [...new Set(BINDINGS.map((b) => b.level))].sort((a, b) => a - b), []);
+  /** 每个形态有多少条可练的题(按钮上的数字) */
+const countsByShape = useMemo(() => {
+  const m: Record<string, number> = {};
+  for (const b of TRAINABLE) {
+    const s = shapeOf(b.display);
+    m[s] = (m[s] ?? 0) + 1;
+  }
+  return m;
+}, []);
+const countOf = (s: Shape) => countsByShape[s] ?? 0;
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8 font-mono">
@@ -274,7 +286,7 @@ const levels = useMemo(() => [...new Set(BINDINGS.map((b) => b.level))].sort((a,
         </a>
       </h1>
       <p className="mt-1 text-xs text-neutral-500">
-        按键序列训练 · 数据集来自本机 LazyVim 16.0.1 实测抽取({pool.length} 条;窗口键已移至
+        按键序列训练 · 数据集来自本机 LazyVim 16.0.1 实测抽取({TRAINABLE.length} 条;窗口键已移至
         可视化窗口练习)
       </p>
       <p className="mt-1 text-[11px] text-neutral-600">
@@ -325,28 +337,33 @@ const levels = useMemo(() => [...new Set(BINDINGS.map((b) => b.level))].sort((a,
         </button>
       </div>
 
-      <div className="mt-4 mb-6 flex flex-wrap gap-1.5">
-        {levels.map((l) =>
-          l === 1 ? (
-            // 第 1 关(窗口键)不在首页出题,按钮换成去可视化页面的入口。
-            // 直接删掉按钮会让人以为"少了一关数据丢了",不如指个去处。
-            <a
-              key={l}
-              href="/windows"
-              title="窗口键在可视化页面练"
-              className="rounded border border-dashed border-neutral-700 px-2 py-1 text-xs text-neutral-600 hover:border-blue-500 hover:text-blue-400"
-            >
-              窗口键 → /windows
-            </a>
-          ) : (
-            <LevelBtn key={l} active={level === l} onClick={() => setLevel(l)}>
-              {LEVEL_NAMES[l] ?? `第 ${l} 关`}
+      {/* 分组按钮 —— 按键的形态分,不按「第 x 关」 */}
+      <div className="mt-4 space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {SEQ_GROUPS.map((g) => (
+            <LevelBtn key={g.id} active={level === g.shape} onClick={() => setLevel(g.shape)}>
+              {g.name}
+              <span className="ml-1.5 text-neutral-600">{countOf(g.shape)}</span>
             </LevelBtn>
-          ),
+          ))}
+          <LevelBtn active={level === "all"} onClick={() => setLevel("all")}>
+            全部
+            <span className="ml-1.5 text-neutral-600">{TRAINABLE.length}</span>
+          </LevelBtn>
+        </div>
+        {/* 当前分组的说明 —— 让「这组在练什么」一眼看到 */}
+        {level !== "all" && (
+          <div className="text-[11px] text-neutral-500">
+            {SEQ_GROUPS.find((g) => g.shape === level)?.what}
+          </div>
         )}
-        <LevelBtn active={level === "all"} onClick={() => setLevel("all")}>
-          全部({TRAINABLE.length})
-        </LevelBtn>
+        <div className="text-[10px] text-neutral-700">
+          ⚠️ 窗口那 8 条不在这里练 —— 它们有真实的窗口布局可以画,去
+          <a href="/windows" className="text-blue-400 hover:underline">
+            可视化窗口练习
+          </a>
+          。其它已可视化的族(缓冲区 / 标签页 / 文件 / 文本对象 / 界面开关 / 诊断)也都在那边。
+        </div>
       </div>
 
       {current ? (
