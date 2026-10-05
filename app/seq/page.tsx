@@ -7,6 +7,7 @@ import { buildIndex, match, type Binding } from "@/lib/matcher";
 import { load, save, record, pickNext, summarize, reset, type Progress } from "@/lib/progress";
 import { RAW, GROUPS } from "@/lib/bindings";
 import { SEQ_GROUPS, shapeOf, type Shape } from "@/lib/seq-groups";
+import KeyboardView, { useAutoAdvance } from "./keyboard-view";
 import { translate } from "@/lib/i18n";
 
 // 数据集里 keys 留空(运行时用 splitLhs 展开),desc 换成中文
@@ -278,6 +279,19 @@ const countsByShape = useMemo(() => {
 }, []);
 const countOf = (s: Shape) => countsByShape[s] ?? 0;
 
+  /**
+   * 键盘图的显示逻辑。
+   *
+   * ⚠️ **只在答完之后显示**(correct / wrong),答题时不给。
+   *   理由:键盘上直接亮出答案,就把盲背变成抄写。
+   *   但答完之后必须给 —— 光看一串文字记不住位置,
+   *   而位置恰恰是肌肉记忆的一半(qwerty 练习器就是练这个)。
+   */
+  const answerShown = phase === "correct" || phase === "wrong";
+  const answerTokens = current ? splitLhs(current.display) : [];
+  // 自动逐键前进,演示手指怎么走过去
+  const kbdAt = useAutoAdvance(answerTokens, answerShown);
+
   return (
     <main className="mx-auto max-w-2xl px-5 py-8 font-mono">
       <h1 className="text-xl font-bold">
@@ -415,6 +429,34 @@ const countOf = (s: Shape) => countsByShape[s] ?? 0;
           {phase === "wrong" && (
             <div className="mt-4 border-t border-neutral-800 pt-3 text-sm">
               正确答案 <b className="text-blue-400">{current.display}</b> — {current.desc}
+            </div>
+          )}
+
+          {/* 键盘图 —— 答完(correct/wrong)才显示,见 KBD 说明 */}
+          {answerShown && (
+            <div className="mt-4 border-t border-neutral-800 pt-3">
+              <div className="mb-2 text-[11px] text-neutral-600">
+                按这个顺序走一遍(蓝 = 当前该按,绿 = 已按过)
+              </div>
+              <KeyboardView tokens={answerTokens} at={kbdAt} done={Math.max(0, kbdAt - 1)} />
+              <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px]">
+                {answerTokens.map((t, i) => (
+                  <span key={i} className="flex items-center gap-1">
+                    {i > 0 && <span className="text-neutral-700">→</span>}
+                    <kbd
+                      className={`rounded px-1.5 py-0.5 ${
+                        i === kbdAt
+                          ? "bg-blue-950 text-blue-200"
+                          : i < kbdAt
+                            ? "bg-green-950 text-green-400"
+                            : "bg-neutral-800 text-neutral-500"
+                      }`}
+                    >
+                      {t}
+                    </kbd>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
