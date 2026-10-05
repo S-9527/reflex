@@ -243,6 +243,49 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     roundSize,
   } = opts;
 
+  /**
+   * ⚠️⚠️ 外部回调统一走 ref —— 这是**治本**，不是补丁。
+   *
+   * ## 为什么
+   *
+   * `apply` / `onOther` / `noEffectText` / `onResetExtra` 都会进
+   * `useEffect` 的依赖数组。而调用方**几乎总是**写成内联箭头函数：
+   *
+   * ```tsx
+   * noEffectText: (seq) => `${seq.join("")} 走不动`
+   * onResetExtra: () => { ref.current = null }
+   * ```
+   *
+   * 那是每次渲染都新建的引用。一旦进依赖：
+   *
+   * ```
+   * 渲染 → 依赖变了 → effect 跑 → setState → 再渲染 → 依赖又变 → …
+   * ```
+   *
+   * 实测后果：`Maximum update depth exceeded`，整个页面白屏
+   * （`/windows` 的键位模式就是这么崩的）。
+   *
+   * ## 为什么不在调用方逐个改
+   *
+   * 12 个练习页里几乎每个都有内联回调 —— 逐个改成 `useCallback`
+   * 是**治标**：以后谁再写一次内联的就复发。
+   *
+   * 走 ref 之后，调用方怎么写都不会触发循环 —— 这是引擎该负的责任。
+   * （`onResetExtra` 早先已经这么修了，这里把其余几个也统一。）
+   */
+  const applyRef = useRef(apply);
+  const onOtherRef = useRef(onOther);
+  const noEffectTextRef = useRef(noEffectText);
+  const onResetExtraRef = useRef(onResetExtra);
+
+  // 同步 ref（写 ref 不触发重渲染，所以这个 effect 本身不会循环）
+  useEffect(() => {
+    applyRef.current = apply;
+    onOtherRef.current = onOther;
+    noEffectTextRef.current = noEffectText;
+    onResetExtraRef.current = onResetExtra;
+  });
+
   /** 本轮题目顺序。默认全部（按题库顺序） */
   const makeOrder = useCallback(
     (custom?: string[]) => custom ?? tasks.map((t) => t.id),
@@ -409,7 +452,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     setHint(0);
     usedHintRef.current = false;
     taskStart.current = null;
-    onResetExtra?.();
+    onResetExtraRef.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -426,9 +469,9 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
       setHint(0);
       usedHintRef.current = false;
       taskStart.current = null;
-      onResetExtra?.();
+      onResetExtraRef.current?.();
     },
-    [boardId, makeOrder, init, onResetExtra],
+    [boardId, makeOrder, init],
   );
 
   const reset = useCallback(() => {
@@ -511,11 +554,13 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
       setFlash(null);
       setKeyFeed([]);
       taskStart.current = null;
-      onResetExtra?.();
+      onResetExtraRef.current?.();
       return;
     }
     resetTaskState();
-  }, [currentId, resetTaskState, keepStateOnAdvance, onResetExtra]);
+    // ⚠️ 依赖里**没有** onResetExtra —— 它走 ref（见上面的说明）。
+    //    放进来的话，调用方写内联箭头函数就会无限循环。
+  }, [currentId, resetTaskState, keepStateOnAdvance]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -578,7 +623,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
          * 4. 都不是 → 明确报错，不静默
          */
         const cur0 = taskRef.current;
-        const tryApply = (seq: string[]) => apply(seq, stateRef.current, cur0);
+        const tryApply = (seq: string[]) => applyRef.current(seq, stateRef.current, cur0);
 
         let used: string[] | null = null;
         let out0 = tryApply([k]);
@@ -611,7 +656,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
           setKeyFeed((f) => pushFeed(f, 0, k, false));
           setFlash({
             ok: false,
-            text: noEffectText ? noEffectText([k]) : `${k} 这一步走不动`,
+            text: noEffectTextRef.current ? noEffectTextRef.current([k]) : `${k} 这一步走不动`,
           });
           return;
         }
@@ -658,7 +703,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
             setBuf([]);
             const shown2 = r2.seq.join("");
             setLog((l) => [...l, shown2]);
-            const res = onOther?.(r2.seq, stateRef.current, taskRef.current);
+            const res = onOtherRef.current?.(r2.seq, stateRef.current, taskRef.current);
             if (res?.next !== undefined) setState(res.next);
             setFlash({
               ok: false,
@@ -697,12 +742,12 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
       setKeyFeed((f) => pushFeed(f, next.length - 1, k, true));
 
       const cur = taskRef.current;
-      const out = apply(r.seq, stateRef.current, cur);
+      const out = applyRef.current(r.seq, stateRef.current, cur);
       if (out === NO_EFFECT) {
         setFlash({
           ok: false,
-          text: noEffectText
-            ? noEffectText(r.seq)
+          text: noEffectTextRef.current
+            ? noEffectTextRef.current(r.seq)
             : `${shown} 按了但状态没变(当前状态没东西可操作)`,
         });
         return;
@@ -715,7 +760,9 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true });
     // state / buf / task 故意不进依赖:handler 通过 ref 读最新值。
-  }, [firstKeys, toPanelKey, task.accept, extraAccept, onOther, apply, noEffectText, commit]);
+    // ⚠️ apply / onOther / noEffectText 走 ref，**不进依赖** ——
+    //    调用方写内联箭头函数也不会触发循环（见上面的说明）。
+  }, [firstKeys, toPanelKey, task.accept, extraAccept, commit]);
 
   /**
    * 结算数据 —— 直接调 lib/session.ts 的 `summarize`。

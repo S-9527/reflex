@@ -216,6 +216,11 @@ export default function HydraDrill() {
   /** 缩放前的样子,再按一次 m 用来恢复 */
   const zoomedRef = useRef<View | null>(null);
 
+  /** 换题时清掉缩放备份（`onResetExtra` 要用，所以必须是稳定引用） */
+  const resetZoom = useCallback(() => {
+    zoomedRef.current = null;
+  }, []);
+
   const init = useCallback((t: DrillTask) => buildStart(TASK_OF.get(t.id)!), []);
 
   const apply = useCallback(
@@ -259,9 +264,17 @@ export default function HydraDrill() {
     onOther,
     // 延迟给够看反馈:判对后立刻翻页重置会让人看不出那下生效没有
     noEffectText: (seq) => `${seq.join("")} 按了但布局没变(当前布局下这个键无效)`,
-    onResetExtra: () => {
-      zoomedRef.current = null;
-    },
+    /**
+     * ⚠️ 用 `useCallback` 包住，不要写内联箭头函数。
+     *
+     * 内联的话每次渲染都是新引用 —— 而引擎的 effect 曾经依赖它，
+     * 于是「渲染 → 依赖变 → setState → 再渲染」无限循环，
+     * 页面直接白屏（`Maximum update depth exceeded`）。
+     *
+     * 引擎那边已经改成走 ref 了（双保险），但这里包一下更清楚：
+     * **传给 hook 的回调该是稳定的**。
+     */
+    onResetExtra: resetZoom,
   });
 
   const task = TASK_OF.get(d.task.id)!;
