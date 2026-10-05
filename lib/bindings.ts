@@ -5379,8 +5379,8 @@ export const COMMANDS: Command[] = [
   "wkGroup": true,
   "alternates": [],
   "equivBy": "desc",
-  "native": ":bdelete +bufhidden",
-  "nativeVerified": true,
+  "native": null,
+  "nativeVerified": "unchecked",
   "total": 1
  },
  {
@@ -5413,7 +5413,7 @@ export const COMMANDS: Command[] = [
   "wkGroup": true,
   "alternates": [],
   "equivBy": "rhs",
-  "native": ":bdelete 1,$",
+  "native": ":1,.-1bdelete",
   "nativeVerified": true,
   "total": 1
  },
@@ -5430,7 +5430,7 @@ export const COMMANDS: Command[] = [
   "wkGroup": true,
   "alternates": [],
   "equivBy": "desc",
-  "native": ":bdelete!",
+  "native": ":%bdelete",
   "nativeVerified": true,
   "total": 1
  },
@@ -5464,8 +5464,8 @@ export const COMMANDS: Command[] = [
   "wkGroup": true,
   "alternates": [],
   "equivBy": "rhs",
-  "native": ":bdelete +bufhidden",
-  "nativeVerified": true,
+  "native": null,
+  "nativeVerified": "unchecked",
   "total": 1
  },
  {
@@ -5481,7 +5481,7 @@ export const COMMANDS: Command[] = [
   "wkGroup": true,
   "alternates": [],
   "equivBy": "rhs",
-  "native": ":bdelete %,$",
+  "native": ":+1,$bdelete",
   "nativeVerified": true,
   "total": 1
  },

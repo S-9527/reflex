@@ -282,12 +282,36 @@ const NATIVE_VERIFIED = {
   "Switch to Other Buffer": [":buffer #", true],
   "Delete Buffer": [":bdelete", true],
   "Delete Buffer and Window": [":bdelete", true],
-  "Delete Invisible Buffers": [":bdelete +bufhidden", true],
+  /**
+   * ⚠️⚠️ 这一条原来写的是 `:bdelete +bufhidden` —— **那不是合法语法**。
+   *
+   * 实测报 `E94: No matching buffer for +bufhidden`（探针 `probe-bdelete.txt`）。
+   * `+bufhidden` 是 **buffer 选项**（`bufhidden=wipe`），不是 `:bdelete` 的参数。
+   *
+   * 「删掉看不见的 buffer」在 Vim 里没有直接等价的单条 Ex 命令 ——
+   * 要自己筛（`:bdelete` 配合 `bufhidden` 或写循环）。
+   * 所以这里**诚实地写「没有单条等价」**，而不是编一个跑不通的。
+   */
+  "Delete Invisible Buffers": [null, "unchecked", "没有单条 Ex 等价：要按 bufhidden/可见性自己筛"],
   "Pick Buffer": [":buffers", true],
-  "Delete Buffers to the Left": [":bdelete 1,$", true],
-  "Delete Other Buffers": [":bdelete!", true],
-  "Delete Non-Pinned Buffers": [":bdelete +bufhidden", true],
-  "Delete Buffers to the Right": [":bdelete %,$", true],
+  /**
+   * ⚠️⚠️ 两条都是实测出来的，不是照文档抄的。
+   *
+   * **1. 范围语法是 `:N,Mbdelete`（范围紧贴命令名）**，
+   *    不是 `:bdelete N,M`。实测：`1,2bdelete` ✅ / `bdelete 1,$` ❌ E94。
+   *    见 `:help :bdelete` 的 `:N,Mbdelete[!]`。
+   *
+   * **2. 用相对范围 `.` / `$`，不需要占位符**。
+   *    我第一版写成 `:1,{当前-1}bdelete` —— 那是**跑不通的占位符**
+   *    （实测 `E492: Not an editor command`）。
+   *    正确写法是 `:1,.-1bdelete`（`.` = 当前行/buffer）。
+   *
+   * 边界：已经在第一个 buffer 时，`E516: No buffers were deleted`。
+   */
+  "Delete Buffers to the Left": [":1,.-1bdelete", true],
+  "Delete Other Buffers": [":%bdelete", true],
+  "Delete Non-Pinned Buffers": [null, "unchecked", "没有单条 Ex 等价：要按 pin 状态自己筛"],
+  "Delete Buffers to the Right": [":+1,$bdelete", true],
   Buffers: [":buffers", true],
   "Buffers (all)": [":ls", true],
   "Find Config File": [":edit $MYVIMRC", true],
