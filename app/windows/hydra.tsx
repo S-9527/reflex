@@ -262,7 +262,17 @@ export default function HydraDrill() {
     toPanelKey,
     extraAccept: PANEL,
     onOther,
-    // 延迟给够看反馈:判对后立刻翻页重置会让人看不出那下生效没有
+    /**
+     * ⚠️⚠️ 答对后**停住等确认**，不自动翻页。
+     *
+     * 这一页练的是「按下去布局怎么变」—— 立刻翻页的话，
+     * 效果还没看见就被下一题重置了（你报的就是这个）。
+     *
+     * 旧版用 `advanceMs: 1600` 延迟翻页顶这个需求，但那是
+     * 「等固定时长」：看不清的人来不及，看清的人白等。
+     * 现在改成**按任意键才翻页**，节奏交给用户。
+     */
+    holdOnSolve: true,
     noEffectText: (seq) => `${seq.join("")} 按了但布局没变(当前布局下这个键无效)`,
     /**
      * ⚠️ 用 `useCallback` 包住，不要写内联箭头函数。
@@ -317,6 +327,27 @@ export default function HydraDrill() {
         </div>
 
         {/*
+          ⚠️⚠️ 等确认时**必须在题目区显眼位置提示**。
+          
+          `FlashLine` 的「按任意键继续」在页面底部，而答对后
+          用户的视线在**布局**上（他在看效果）—— 看不到底部那行字，
+          会以为卡住了。
+          
+          所以这里给一个显眼的横幅，就在题目区（视线落点附近）。
+        */}
+        {d.holding && (
+          <div
+            data-holding-banner
+            className="mt-3 flex items-center gap-2 rounded border border-green-800 bg-green-950/30 px-3 py-2 text-xs"
+          >
+            <span className="text-green-400">✓ 对了</span>
+            <span className="text-neutral-400">
+              看清布局怎么变了吗？<b className="text-neutral-200">按任意键继续</b>
+            </span>
+          </div>
+        )}
+
+        {/*
           ⚠️ 旧版这里直接写出 `task.key`（= 面板键，也就是答案）。
           改成逐键上色：`<Space>` `w` `X` 三个格子，按对一个绿一个。
           这样仍然保留了「这一页要按三键」的信息，但不给答案。
@@ -368,7 +399,7 @@ export default function HydraDrill() {
           </>
         }
       />
-      <FlashLine flash={d.flash} />
+      <FlashLine flash={d.flash} holding={d.holding} />
 
       <KeyTable highlight={task.key} />
     </DrillFlow>

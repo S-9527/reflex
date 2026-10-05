@@ -164,11 +164,28 @@ export function KeyLog({ log, hint }: { log: string[]; hint?: React.ReactNode })
 }
 
 /** 判分反馈 */
-export function FlashLine({ flash }: { flash: Flash | null }) {
+export function FlashLine({ flash, holding = false }: { flash: Flash | null; holding?: boolean }) {
   if (!flash) return null;
   return (
-    <div data-flash={flash.ok ? "ok" : "bad"} className={`text-xs ${flash.ok ? "text-green-400" : "text-red-400"}`}>
+    <div
+      data-flash={flash.ok ? "ok" : "bad"}
+      className={`text-xs ${flash.ok ? "text-green-400" : "text-red-400"}`}
+    >
       {flash.text}
+      {/*
+        ⚠️ 等确认时必须**明确说**「按任意键继续」。
+        
+        没有这句提示的话，用户会以为卡住了 —— 这正是旧版
+        `advanceMs` 那个延迟想解决的问题（但它拖慢节奏）。
+        
+        `holdOnSolve` 的板块（hydra）答对后停在原地让用户看效果，
+        所以必须给一个继续的提示。
+      */}
+      {holding && (
+        <span data-holding="1" className="ml-3 text-neutral-500">
+          按任意键继续（先看清效果）
+        </span>
+      )}
     </div>
   );
 }

@@ -169,6 +169,29 @@ export type UseDrillOpts<S> = {
    * 「打完一个词库」一致。传数字则随机抽那么多道。
    */
   roundSize?: number;
+  /**
+   * 答对后**停住等确认**，不立刻翻页。
+   *
+   * ## 什么时候需要
+   *
+   * qwerty 式打字流的核心是「命中即翻页」（没有定时器）。
+   * 但有一类板块的**反馈本身就是要看的东西** ——
+   * `/windows` 的键位模式（hydra）：按下去布局会变，
+   * 用户得看清楚「这个键让窗口怎么动了」。
+   *
+   * 立刻翻页的话，效果还没看见就被下一题重置了。
+   * 旧版用 `advanceMs: 1600` 延迟翻页顶这个需求，
+   * 但那是「等固定时长」——看不清的人来不及，看清的人白等。
+   *
+   * 设成 true 之后：结算完成 → 停在原地显示效果 → **按任意键才翻页**。
+   *
+   * ## 和打字流的关系
+   *
+   * 这不是回退到「答题器」——默认仍然是命中即翻页，
+   * 只有明确需要看效果的板块才开。而且它是**用户按一下就过**，
+   * 不是「等 N 毫秒」，所以不会拖慢节奏。
+   */
+  holdOnSolve?: boolean;
 };
 
 /** 稳定的空数组常量 —— 避免每次渲染都造新数组导致下游 memo 失效 */
@@ -212,6 +235,13 @@ export type UseDrill<S> = {
   setMode: (m: Mode) => void;
   /** 当前题的提示级别 0~3 */
   hint: HintLevel;
+  /**
+   * 已结算、**等用户按键翻页**（只有 `holdOnSolve` 会为 true）。
+   *
+   * UI 用它显示「按任意键继续」的提示 —— 没有提示的话
+   * 用户会以为卡住了（这正是旧版 `advanceMs` 想解决的问题）。
+   */
+  holding: boolean;
   /** 要按 ? 才给提示 —— 这个函数就是 ? 的动作 */
   showHint: () => void;
   /** 这一题有没有提示可给（单键的题给提示等于给答案） */
@@ -241,6 +271,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     onResetExtra,
     keepStateOnAdvance = false,
     roundSize,
+    holdOnSolve = false,
   } = opts;
 
   /**
@@ -361,6 +392,23 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
   /** 这一题第一个键按下的时刻 —— 用来算单题用时 */
   const taskStart = useRef<number | null>(null);
 
+  /**
+   * 等用户确认才翻页（`holdOnSolve` 用）。
+   *
+   * 记的是「已经结算、但还没翻页」的那道题。
+   * 用户按任意键 → 清空它 → 游标推进 → 下一题。
+   */
+  /**
+   * 暂存「已结算、但还没翻页」的结果（`holdOnSolve` 用）。
+   *
+   * ⚠️ 存的是**结果本身**，不是「要不要翻页」的布尔 ——
+   *    因为游标推进就是 `sessionRecord(session, r)`，
+   *    推迟翻页 = 推迟这次 record。存了结果，确认时补记一次即可。
+   */
+  const [pendingResult, setPendingResult] = useState<Result | null>(null);
+  /** handler 要读最新值，所以走 ref（和 bufRef 同一个理由） */
+  const pendingResultRef = useRef<Result | null>(null);
+
   useEffect(() => {
     setProgress(SRS.load());
   }, []);
@@ -452,6 +500,9 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     setHint(0);
     usedHintRef.current = false;
     taskStart.current = null;
+    // ⚠️ 等确认状态也要清 —— 不清的话换题后还停在「按任意键继续」
+    pendingResultRef.current = null;
+    setPendingResult(null);
     onResetExtraRef.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -519,19 +570,36 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
         usedHint: usedHintRef.current,
         mode: modeRef.current,
       };
-      setSession((s) => sessionRecord(s, r));
-
       /**
        * ⚠️ 每一次作答都记进 SRS，但**只有独立答对**才推进熟练度。
        *
        * 答错也要记 —— 否则错题不会被回插（dueAt = now），
        * 复习队列就漏掉了最该复习的那些。
+       *
+       * ⚠️ 这一步**不受 holdOnSolve 影响** —— 熟练度该记就记，
+       *    推迟的只是「翻页」（也就是 `sessionRecord`）。
        */
       const independent = countsForProgress(modeRef.current, usedHintRef.current);
       persist(cur.id, ok, independent, ms);
       taskStart.current = null;
+
+      /**
+       * ⚠️ 需要看效果的板块（hydra）**停住等确认**。
+       *
+       * 游标推进 = `sessionRecord(session, r)` = 换题 = 布局被重置。
+       * 立刻推进的话用户看不见「这个键让窗口怎么动了」。
+       *
+       * 所以这里把结果**暂存**，等用户按键时再补记（见 keydown handler）。
+       */
+      if (holdOnSolve && ok) {
+        pendingResultRef.current = r;
+        setPendingResult(r);
+        return;
+      }
+
+      setSession((s) => sessionRecord(s, r));
     },
-    [persist],
+    [persist, holdOnSolve],
   );
 
   /** 跳过当前题 —— 记为答错，但不计按键（用户没按） */
@@ -569,6 +637,24 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
 
       // 本题已经做完（会话推进中）—— 不接管
       if (sessionIsDone(sessionRef.current)) return;
+
+      /**
+       * ⚠️ 等确认状态（`holdOnSolve`）—— 按**任意键**翻页。
+       *
+       * 这一分支必须在所有其它判断**之前**：此时题目已结算完，
+       * 用户按什么键都只该是「我看完了，继续」。
+       *
+       * 放在后面的话，那个键会被当成**下一题的输入** ——
+       * 第一键被吃掉，或者更糟：直接判错下一题。
+       */
+      if (pendingResultRef.current) {
+        e.preventDefault();
+        const r = pendingResultRef.current;
+        pendingResultRef.current = null;
+        setPendingResult(null);
+        setSession((prev) => sessionRecord(prev, r));
+        return;
+      }
 
       /**
        * `?` 是提示键。
@@ -820,6 +906,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
     mode,
     setMode,
     hint,
+    holding: pendingResult !== null,
     showHint,
     canHint: hintUseful(bestKeys),
     shownKeys,
