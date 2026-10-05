@@ -35,8 +35,9 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ARENAS,
+  gridCoords,
+  gridSize,
   hasNeighbor,
-  makeTask,
   move,
   shortestSteps,
   type Arena,
@@ -264,9 +265,88 @@ function toPanelKey(e: KeyboardEvent): string | null {
 
 /* ------------------------------------------------------------------ 渲染 */
 
-/** 把 arena 的邻接表画成网格 */
+/**
+ * 这个窗口跨几行 / 几列。
+ *
+ * ## 为什么需要它
+ *
+ * 「嵌套(竖切再横切)」那套布局里，右侧窗口**贯穿两行** ——
+ * 它的 `aboveOf` / `belowOf` 都是 `NONE`，而左列有上下两个窗口。
+ * 不处理的话它只占一格，右下角空出一块（截图里那种「乱掉」）。
+ *
+ * ## 判据
+ *
+ * 同一**列**里，从本窗口的行往下数，到**下一个被别的窗口占用的行**
+ * 为止 —— 中间那些行都归它。没有更下面的窗口就一直占到底。
+ *
+ * 列方向同理。
+ */
+function countSpan(arena: Arena, i: number, axis: "row" | "col"): number {
+  const cs = gridCoords(arena);
+  const { rows, cols } = gridSize(arena);
+  const self = cs[i];
+
+  /**
+   * ⚠️ 两个方向用**不同的判据**，不能套同一套逻辑。
+   *
+   * 我第一版两个方向共用一套「同轴找下一个」，结果「嵌套」那套里
+   * **左下**窗口算出了 `col span = 2`（它该只占第 1 列）——
+   * 因为同一行里没有别的窗口，就一路占到底了。
+   *
+   * 正确的判据：
+   *
+   * - **行跨度**：同一列里，本窗口**下方**还有窗口吗？
+   *   没有 → 占到底（这就是「右侧贯穿两行」的情况）
+   * - **列跨度**：同一行里，本窗口**右方**还有窗口吗？
+   *   没有 → 占到底
+   *
+   * 关键差别：**只在真的跨了的时候才 span**。
+   * 「左下」下方没有窗口（它在最底），所以行 span 到边界 = 1 行；
+   * 它的右方有窗口（右侧那个），所以列 span = 1。
+   */
+  if (axis === "row") {
+    /**
+     * 行跨度：看**邻接表**里本窗口的下方关系。
+     *
+     * ⚠️ 用邻接表判，不用纯几何 —— 因为「嵌套」那套布局是
+     *    **有意简化**的模型：右侧窗口贯穿两行，但 `belowOf` 是 NONE
+     *    （它下面确实没有可跳的窗口）。纯几何会算出别的东西。
+     */
+    const hasBelow = arena.belowOf[i] !== -1;
+    if (hasBelow) return 1;
+    // 没有下邻 —— 看这一列里有没有别的窗口排在我下面
+    const othersBelow = cs.some((c, j) => j !== i && c.col === self.col && c.row > self.row);
+    return othersBelow ? 1 : rows - self.row;
+  }
+
+  /**
+   * 列跨度：**这套数据里恒为 1**。
+   *
+   * 五套布局里没有跨列的窗口（最宽的也只是贯穿两行的右侧窗口）。
+   * 写死 1 比「猜一个通用算法」诚实 —— 需要跨列时再加。
+   *
+   * ⚠️ 我第一版两个方向共用一套「同轴找下一个」的逻辑，
+   *    结果「嵌套」的左下窗口算出了 `col span = 2`
+   *    （它该只占第 1 列）—— 因为那一行没有别的窗口，就一路占到底了。
+   */
+  return 1;
+}
+
+/**
+ * 把 arena 的邻接表画成网格。
+ *
+ * ## ⚠️ 布局必须**从邻接表推导**，不能猜
+ *
+ * 我第一版写的是 `cols = 窗口数量`，于是四宫格（4 个窗口）
+ * 被画成 **4 列**，而它是 2×2。截图里就是「3 列 + 1 个孤行」——
+ * 因为我还加了 `Math.min(cols, 3)` 兜底，把它压成 3 列，更乱。
+ *
+ * 现在用 `gridCoords()` 从 `leftOf` / `aboveOf` 推真实坐标
+ * （见 lib/arena.ts 的说明）。布局永远不会和判分逻辑脱节。
+ */
 function WindowGrid({ arena, focus, target }: { arena: Arena; focus: number; target: number }) {
-  const cols = Math.max(1, ...arena.wins.map((_, i) => i + 1));
+  const coords = gridCoords(arena);
+  const { rows, cols } = gridSize(arena);
   return (
     <div className="rounded bg-neutral-950 p-3">
       <div className="mb-1.5 flex flex-wrap items-center gap-3 text-[10px] text-neutral-700">
@@ -279,25 +359,43 @@ function WindowGrid({ arena, focus, target }: { arena: Arena; focus: number; tar
         </span>
       </div>
       <div
+        data-grid={`${rows}x${cols}`}
         className="grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${Math.min(cols, 3)}, minmax(0, 1fr))` }}
+        style={{
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+        }}
       >
         {arena.wins.map((w, i) => {
           const isFocus = i === focus;
           const isTarget = i === target;
+          const { row, col } = coords[i];
+          /**
+           * ⚠️ 跨行/跨列的窗口要显式指定 span。
+           *
+           * 「嵌套(竖切再横切)」那套里，右侧那个窗口**贯穿两行** ——
+           * 它的 `aboveOf` / `belowOf` 都是 NONE，而左列有两个窗口。
+           * 不处理的话它只占一格，右下角会空出一块。
+           */
+          const rowSpan = countSpan(arena, i, "row");
+          const colSpan = countSpan(arena, i, "col");
           return (
             <div
               key={i}
               data-win={i}
               data-focus={isFocus ? "1" : undefined}
               data-target={isTarget ? "1" : undefined}
-              className={`flex h-16 items-center justify-center rounded border text-[11px] ${
+              className={`flex min-h-16 items-center justify-center rounded border text-[11px] ${
                 isFocus
                   ? "border-blue-400 bg-blue-950 text-blue-100"
                   : isTarget
                     ? "border-yellow-600 bg-yellow-950/40 text-yellow-200"
                     : "border-neutral-700 bg-neutral-900 text-neutral-500"
               }`}
+              style={{
+                gridRow: `${row + 1} / span ${rowSpan}`,
+                gridColumn: `${col + 1} / span ${colSpan}`,
+              }}
             >
               {w.label}
             </div>

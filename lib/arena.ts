@@ -199,3 +199,83 @@ export function makeTask(arena: Arena, focus: number, rand: () => number = Math.
   else if (dl !== NONE) hint += " —— 它在当前窗口左边";
   return { from: focus, to, hint };
 }
+
+/* ------------------------------------------------------------ 布局推导 */
+
+/**
+ * 从**邻接表**推导每个窗口的网格坐标。
+ *
+ * ## ⚠️ 为什么要推导，而不是在数据里存「几行几列」
+ *
+ * `Arena` 只存邻接关系（`leftOf` / `rightOf` / `aboveOf` / `belowOf`）——
+ * 那是**判分和移动的唯一真源**。
+ *
+ * 我第一版渲染时直接写 `cols = 窗口数量`，于是四宫格（4 个窗口）
+ * 被画成 **4 列**，而它是 2×2。截图里就是「3 列 + 1 个孤行」——
+ * 因为我还加了 `Math.min(cols, 3)` 兜底，把它压成 3 列，更乱。
+ *
+ * 正确做法是**从邻接表推**：左邻接关系决定列，上邻接关系决定行。
+ * 这样布局永远不会和判分逻辑脱节。
+ *
+ * ## 算法
+ *
+ * 用并查集式的松弛迭代：
+ *   1. 每个窗口初始坐标 (0,0)
+ *   2. 反复扫描邻接表：`rightOf[i] = j` → `col[j] = col[i] + 1`
+ *                       `belowOf[i] = j` → `row[j] = row[i] + 1`
+ *   3. 收敛后把坐标平移，让最小行列都从 0 开始
+ *
+ * ⚠️ 必须迭代到收敛，不能一趟扫完 —— 「嵌套」那套布局里
+ *    窗口 2 的列坐标依赖窗口 0，而窗口 0 又可能被后面的关系更新。
+ *
+ * @returns 每个窗口的 `{ row, col }`，下标和 `arena.wins` 对应
+ */
+export function gridCoords(arena: Arena): { row: number; col: number }[] {
+  const n = arena.wins.length;
+  const col = new Array<number>(n).fill(0);
+  const row = new Array<number>(n).fill(0);
+
+  // 松弛迭代到收敛（n 个窗口最多 n 轮就稳定）
+  for (let pass = 0; pass < n + 1; pass++) {
+    let changed = false;
+
+    for (let i = 0; i < n; i++) {
+      const r = arena.rightOf[i];
+      if (r !== NONE && col[r] < col[i] + 1) {
+        col[r] = col[i] + 1;
+        changed = true;
+      }
+      const l = arena.leftOf[i];
+      if (l !== NONE && col[l] > col[i] - 1) {
+        col[l] = col[i] - 1;
+        changed = true;
+      }
+      const b = arena.belowOf[i];
+      if (b !== NONE && row[b] < row[i] + 1) {
+        row[b] = row[i] + 1;
+        changed = true;
+      }
+      const a = arena.aboveOf[i];
+      if (a !== NONE && row[a] > row[i] - 1) {
+        row[a] = row[i] - 1;
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  // 平移：最小行列归零（不然可能是负数）
+  const minCol = Math.min(...col);
+  const minRow = Math.min(...row);
+  return col.map((c, i) => ({ row: row[i] - minRow, col: c - minCol }));
+}
+
+/** 这套布局有几行几列（给 grid-template 用） */
+export function gridSize(arena: Arena): { rows: number; cols: number } {
+  const cs = gridCoords(arena);
+  return {
+    rows: Math.max(1, ...cs.map((c) => c.row + 1)),
+    cols: Math.max(1, ...cs.map((c) => c.col + 1)),
+  };
+}
