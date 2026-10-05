@@ -68,7 +68,18 @@ type BuildState = { layout: Layout; focus: number };
 
 type BuildTask = DrillTask & {
   hint: string;
+  /** 目标的形状串（判分用） */
   target: string;
+  /**
+   * 目标的**实际布局**（画对比图用）。
+   *
+   * ⚠️ 只有 `target` 那个字符串是**不够**的 —— 用户看不见形状串，
+   *    而搭建模式的核心反馈就是「你的 vs 目标的」并排对比。
+   *
+   * 我同化这一页时只画了「你的布局」，把目标那半丢了 ——
+   * 用户根本不知道要拼成什么样（你报的就是这个）。
+   */
+  targetLayout: Layout;
   /** 示范解法（用于「看答案」，不是唯一解） */
   solution: Op[];
 };
@@ -80,6 +91,7 @@ const TASKS: BuildTask[] = [
     desc: "搭出左右两栏",
     hint: "竖着切一刀",
     target: shape(run([{ dir: "v" }]).layout),
+    targetLayout: run([{ dir: "v" }]).layout,
     solution: [{ dir: "v" }],
     accept: [],
   },
@@ -89,6 +101,7 @@ const TASKS: BuildTask[] = [
     desc: "搭出上下两栏",
     hint: "横着切一刀",
     target: shape(run([{ dir: "h" }]).layout),
+    targetLayout: run([{ dir: "h" }]).layout,
     solution: [{ dir: "h" }],
     accept: [],
   },
@@ -98,6 +111,7 @@ const TASKS: BuildTask[] = [
     desc: "搭出三列并排",
     hint: "切两刀。第二刀要切在刚切出来那个窗口上，不然会变成一宽一窄",
     target: shape(run([{ dir: "v" }, { dir: "v" }]).layout),
+    targetLayout: run([{ dir: "v" }, { dir: "v" }]).layout,
     solution: [{ dir: "v" }, { dir: "v" }],
     accept: [],
   },
@@ -107,6 +121,7 @@ const TASKS: BuildTask[] = [
     desc: "搭出四宫格",
     hint: "先竖切，再横切一刀。反过来（先横后竖）得到的是另一种形状",
     target: shape(run([{ dir: "v" }, { go: "l" }, { dir: "h" }]).layout),
+    targetLayout: run([{ dir: "v" }, { go: "l" }, { dir: "h" }]).layout,
     /**
      * ⚠️⚠️ 示范解法是 `| -`，**不是** `| C-l -`。
      *
@@ -275,7 +290,7 @@ export default function BuildDrill() {
         </div>
       </TaskBox>
 
-      <LayoutView layout={d.state.layout} focus={d.state.focus} />
+      <CompareView mine={d.state.layout} focus={d.state.focus} target={task.targetLayout} />
 
       <KeyLog log={d.log} hint="先按 <Space> 再按 | 或 -" />
       <FlashLine flash={d.flash} />
@@ -317,38 +332,92 @@ function toPanelKey(e: KeyboardEvent): string | null {
   return null;
 }
 
-/** 画分屏树 */
-function LayoutView({ layout, focus }: { layout: Layout; focus: number }) {
+/**
+ * 并排对比：**你的布局 vs 目标布局**。
+ *
+ * ## ⚠️ 这一半不能丢
+ *
+ * 搭建模式练的是「把布局拼成目标那样」—— 用户必须**看得见目标**，
+ * 否则就是盲拼。
+ *
+ * 我同化这一页时只画了「你的布局」，目标只剩下 `task.target`
+ * 那个形状字符串（用户看不见）—— 这是把核心反馈弄丢了。
+ *
+ * 原实现（`577b2e1` 删掉的 `split.tsx`）里有个 `ShapeCompare`
+ * 就是做这个的，我在重写时漏掉了。
+ */
+function CompareView({
+  mine,
+  focus,
+  target,
+}: {
+  mine: Layout;
+  focus: number;
+  target: Layout;
+}) {
+  const matched = shape(mine) === shape(target);
+  return (
+    <div className="rounded bg-neutral-950 p-3">
+      <div className="mb-2 flex flex-wrap items-baseline gap-3 text-[10px]">
+        <span className="text-neutral-500">你的</span>
+        <span className="text-neutral-700">vs</span>
+        <span className="text-yellow-400/90">目标</span>
+        {matched && <span className="text-green-400">✓ 形状已对上</span>}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Mini label="你的" layout={mine} focus={focus} tone="mine" />
+        <Mini label="目标" layout={target} tone="target" />
+      </div>
+    </div>
+  );
+}
+
+/** 画一个小的布局缩略图 */
+function Mini({
+  layout,
+  focus,
+  label,
+  tone,
+}: {
+  layout: Layout;
+  focus?: number;
+  label: string;
+  tone: "mine" | "target";
+}) {
   const pos = positions(layout.root);
   const ids = [...pos.keys()];
   return (
-    <div className="rounded bg-neutral-950 p-3">
-      <div className="mb-1.5 text-[10px] text-neutral-700">
-        你的布局（<span className="text-blue-400">蓝框</span> = 当前焦点）
-      </div>
-      <div className="relative h-40 w-full rounded border border-neutral-800">
+    <div data-mini={tone}>
+      <div className="relative h-32 w-full rounded border border-neutral-800 bg-neutral-900/40">
         {ids.map((id) => {
           const p = pos.get(id)!;
-          const left = p.c0 * 100;
-          const top = p.r0 * 100;
-          const w = (p.c1 - p.c0) * 100;
-          const h = (p.r1 - p.r0) * 100;
+          const isFocus = id === focus;
           return (
             <div
               key={id}
               data-pane={id}
-              data-focus={id === focus ? "1" : undefined}
-              className={`absolute flex items-center justify-center border text-[10px] ${
-                id === focus
-                  ? "border-blue-400 bg-blue-950/60 text-blue-100"
-                  : "border-neutral-700 bg-neutral-900 text-neutral-600"
+              data-focus={isFocus ? "1" : undefined}
+              className={`absolute flex items-center justify-center border text-[9px] ${
+                tone === "target"
+                  ? "border-yellow-800 bg-yellow-950/30 text-yellow-600/80"
+                  : isFocus
+                    ? "border-blue-400 bg-blue-950/60 text-blue-100"
+                    : "border-neutral-700 bg-neutral-900 text-neutral-600"
               }`}
-              style={{ left: `${left}%`, top: `${top}%`, width: `${w}%`, height: `${h}%` }}
+              style={{
+                left: `${p.c0 * 100}%`,
+                top: `${p.r0 * 100}%`,
+                width: `${(p.c1 - p.c0) * 100}%`,
+                height: `${(p.r1 - p.r0) * 100}%`,
+              }}
             >
               {id}
             </div>
           );
         })}
+      </div>
+      <div className="mt-1 text-center text-[10px] text-neutral-600">
+        {label} · {ids.length} 个窗口
       </div>
     </div>
   );
