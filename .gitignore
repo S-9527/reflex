@@ -3,3 +3,6 @@ node_modules
 out
 *.tsbuildinfo
 next-env.d.ts
+
+# 跑 nvim 探针时的临时 XDG 目录（缓存/状态，不是源码）
+.probe/
