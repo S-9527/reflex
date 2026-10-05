@@ -1,13 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { mergeFirstKeys } from "../lib/drill";
 import {
   UI_TOGGLES,
   NATIVE,
   PROBE_LOG,
   isToggle,
   findToggle,
+  fullKey,
   groupsOf,
+  keySeq,
   type UiToggle,
 } from "../lib/ui-toggles";
+import {
+  MEASURED_API,
+  MEASURED_EX,
+  MEASURED_OPTIONS,
+  NOT_EXISTING_EX,
+  ORIGIN_NOTE,
+} from "../lib/provenance";
 
 describe("数据完整性", () => {
   it("key 唯一 —— 要当 React key 用", () => {
@@ -48,6 +58,107 @@ describe("数据完整性", () => {
   it("PROBE_LOG 记着「测不出来」的证据,不是空话", () => {
     expect(PROBE_LOG.length).toBeGreaterThan(0);
     expect(PROBE_LOG.join(" ")).toMatch(/uis|rhs|探针/);
+  });
+
+  /**
+   * ⚠️ 用户提的问题:测不出来的键,也必须说清「它干什么」和
+   * 「这是 Vim 原生还是插件」。只写「未实测」等于什么都没说。
+   */
+  it("每条都有 origin 和 verified —— 不能因为测不出效果就吞掉作用", () => {
+    for (const t of UI_TOGGLES) {
+      expect(t.origin, `${t.key} 缺 origin(原生还是插件)`).toBeTruthy();
+      expect(t.verified, `${t.key} 缺 verified`).toBeTruthy();
+    }
+  });
+
+  it("effect 不能只是把 desc 抄一遍 —— 要说清做什么", () => {
+    for (const t of UI_TOGGLES) {
+      // 太短的说明等于没写
+      expect(t.effect.length, `${t.key} 的 effect 太短`).toBeGreaterThan(8);
+    }
+  });
+
+  it("origin 用的是受控词表,不是自由文本", () => {
+    const allowed = new Set(Object.keys(ORIGIN_NOTE));
+    for (const t of UI_TOGGLES) {
+      expect(allowed.has(t.origin), `${t.key} 的 origin "${t.origin}" 不在词表里`).toBe(true);
+    }
+  });
+
+  it("verified 只用四档,而且 OPT/RHS 的键确实有对应证据", () => {
+    const allowed = new Set(["opt", "rhs", "desc", "none"]);
+    for (const t of UI_TOGGLES) {
+      expect(allowed.has(t.verified), `${t.key} 的 verified "${t.verified}" 不合法`).toBe(true);
+      if (t.verified === "rhs") {
+        expect(t.rhs, `${t.key} 标了 rhs 但没填`).toBeTruthy();
+      }
+      if (t.verified === "desc") {
+        // 只有 desc 的,rhs 必然是 null(没拿到真 Ex 字符串)
+        expect(t.rhs, `${t.key} 标了只有 desc,却有 rhs`).toBeNull();
+      }
+    }
+  });
+
+  it("verified=opt 的键,它声称的底层必须出现在实测清单里", () => {
+    // 这是防「嘴上说核实了,其实没查」的那道闸
+    const all = [...MEASURED_OPTIONS, ...MEASURED_EX, ...MEASURED_API];
+    for (const t of UI_TOGGLES.filter((x) => x.verified === "opt")) {
+      const claims =
+        t.effect + t.origin + " " + (NATIVE[t.key] ?? "");
+      const mentionsSomething = all.some((m) => claims.includes(m));
+      // 至少要提到一个实测过的名字,或者明确说了「纯插件」
+      expect(
+        mentionsSomething || t.origin === "纯插件功能(无原生等价)",
+        `${t.key} 标了 verified=opt,但 effect/native 里没提到任何实测过的 option/命令/API`,
+      ).toBe(true);
+    }
+  });
+
+  it("NOT_EXISTING_EX 里的名字不能被当成原生命令写出去", () => {
+    // :getcurpos 不存在(它是函数),我第一版给它写了 Ex 对照
+    for (const t of UI_TOGGLES) {
+      for (const bad of NOT_EXISTING_EX) {
+        expect(NATIVE[t.key] ?? "", `${t.key} 的 native 里出现了不存在的 :${bad}`).not.toMatch(
+          new RegExp(`:${bad}\\b`),
+        );
+      }
+    }
+  });
+});
+
+describe("leader 不能省", () => {
+  /**
+   * ⚠️ u* 全部 24 条实测 lhs 都带前导空格 = leader 是 <Space>。
+   *   用户在 /diag 报过同类问题(Trouble 那几个被省了 leader)。
+   */
+  it("24 条全都标了 hasLeader", () => {
+    expect(UI_TOGGLES.every((t) => t.hasLeader)).toBe(true);
+  });
+
+  it("fullKey 拼上 <Space>", () => {
+    expect(fullKey(findToggle("uL")!)).toBe("<Space>uL");
+    expect(fullKey(findToggle("uz")!)).toBe("<Space>uz");
+  });
+
+  it("keySeq 是三键 <Space> u X", () => {
+    expect(keySeq(findToggle("uL")!)).toEqual(["<Space>", "u", "L"]);
+    expect(keySeq(findToggle("uA")!)).toEqual(["<Space>", "u", "A"]);
+  });
+
+  it("firstKeys 里 <Space> 在 —— 否则 leader 按了没反应", () => {
+    // ⚠️ 这里传的是「一条条解法」。我第一版写错成多包一层数组,
+    //   而 mergeFirstKeys 当时又把参数摊平,两层错叠在一起,
+    //   测试红得莫名其妙。查下去才发现是引擎的签名不对。
+    const merged = mergeFirstKeys(...UI_TOGGLES.map((t) => keySeq(t)));
+    expect(merged.has("<Space>")).toBe(true);
+    expect(merged.has("<")).toBe(false);
+  });
+
+  it("mergeFirstKeys 每个参数是一条完整解法", () => {
+    const one = mergeFirstKeys(["<Space>", "u", "L"]);
+    expect(one.has("<Space>")).toBe(true);
+    // ⚠️ 回归:坏掉的实现会得到 "<",leader 就接不住了
+    expect(one.has("<")).toBe(false);
   });
 });
 

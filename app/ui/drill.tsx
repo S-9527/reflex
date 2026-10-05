@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback } from "react";
-import { UI_TOGGLES, NATIVE, PROBE_LOG, isToggle, groupsOf, type UiToggle } from "@/lib/ui-toggles";
+import {
+  UI_TOGGLES,
+  NATIVE,
+  PROBE_LOG,
+  isToggle,
+  groupsOf,
+  fullKey,
+  keySeq,
+  type UiToggle,
+} from "@/lib/ui-toggles";
+import { ORIGIN_NOTE, VERIFIED_NOTE } from "@/lib/provenance";
 import type { DrillTask } from "@/lib/drill";
 import { defaultToPanelKey, useDrill } from "@/lib/use-drill";
 import {
@@ -43,10 +53,11 @@ type On = string[];
 
 const TASKS: DrillTask[] = UI_TOGGLES.map((t) => ({
   id: t.key,
-  short: t.key,
+  // 按钮上写全(带 leader),不然看着像两键
+  short: `S${t.key}`,
   desc: t.desc,
-  // `u*` 是 leader + 单键。第二键是面板上的那个字符。
-  accept: [["<Space>", "u", t.key.slice(1)]],
+  // ⚠️ leader + 两个字符,逐键。实测真实 lhs 是 " uL"(前导空格 = leader)
+  accept: [keySeq(t)],
 }));
 
 export default function UiToggleDrill() {
@@ -77,17 +88,18 @@ export default function UiToggleDrill() {
   return (
     <div className="space-y-4">
       <div className="rounded border border-amber-800/60 bg-amber-950/15 p-3 text-[11px] leading-relaxed text-amber-200/90">
-        <b>⚠️ 这一页的效果是「按约定画的」,不是实测的。</b>
+        <b>⚠️ 测不出来的是「画面长什么样」,不是「这个键干什么」。</b>
         <div className="mt-1 text-amber-100/70">
-          实测确认的是<b>键位本身</b>(<code className="text-amber-300">u*</code> 共 24 条,
-          desc 和 rhs 都拿到了)。但它们<b>按下之后到底改了哪些 option</b>,
-          我在本机 headless 下测不出来 ——
-          <code>nvim_list_uis()=0</code>,而且 23/24 条是 Lua 回调(<code>rhs=nil</code>),
-          <code>:normal!</code> 返回成功却没有任何变化。
+          键位、<code>desc</code>、<code>rhs</code> 全是实测自{" "}
+          <code>nvim_get_keymap("n")</code>(24 条)。<b>作用</b>也逐条核实过 ——
+          对应的 option 读得到、Ex 命令 <code>exists()</code> 非 0、Lua API 非 nil,
+          底层属于 Vim 内建还是插件也标在下面。
         </div>
         <div className="mt-1 text-amber-100/70">
-          所以:「键 → 作用」的配对是实测的,<b>「按下之后画面长什么样」是约定的</b>。
-          下面代码块的变化用来帮你记住哪个键管哪个,别当成截图对照。
+          测不出来的是<b>按下之后画面怎么变</b>:<code>nvim_list_uis()=0</code>,
+          23/24 条是 Lua 回调(<code>rhs=nil</code>),<code>:normal!</code>{" "}
+          返回成功却没有任何变化。所以下面代码块的变化<b>按约定画的</b>,
+          用来帮你记住哪个键管哪个,别当截图对照。
         </div>
       </div>
 
@@ -103,30 +115,47 @@ export default function UiToggleDrill() {
 
       <TaskBox>
         <div className="text-neutral-300">
-          {isToggle(t) ? (
-            <>
-              <span>按 </span>
-              <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">
-                <span className="text-blue-400">u</span>
-                {t.key.slice(1)}
-              </kbd>
-              <span> 打开「{t.desc.replace(/^Toggle /, "")}」</span>
-            </>
-          ) : (
-            <>
-              <span>按 </span>
-              <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">
-                <span className="text-blue-400">u</span>
-                {t.key.slice(1)}
-              </kbd>
-              <span> 执行「{t.desc}」</span>
-            </>
-          )}
+          按 <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{fullKey(t)}</kbd>{" "}
+          {isToggle(t) ? "打开" : "执行"}「{t.desc.replace(/^Toggle /, "")}」
         </div>
-        <div className="mt-1 text-neutral-500">{t.effect}</div>
-        <div className="mt-1 text-[11px] text-neutral-600">
-          本机实测:<code>u{t.key.slice(1)}</code> 的 desc 是{" "}
-          <span className="text-neutral-400">{t.desc}</span>;rhs ={" "}
+
+        {/* 作用 —— 测不出画面,这个还是有的 */}
+        <div className="mt-1.5 text-neutral-400">{t.effect}</div>
+
+        {/* 归属:Vim 原生还是插件 */}
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 text-[11px]">
+          <span className="w-8 shrink-0 text-neutral-700">归属</span>
+          <span
+            className={
+              t.origin.startsWith("纯插件")
+                ? "rounded bg-purple-950 px-1.5 py-0.5 text-purple-300"
+                : "rounded bg-green-950 px-1.5 py-0.5 text-green-400"
+            }
+          >
+            {t.origin}
+          </span>
+          <span className="text-neutral-600">{ORIGIN_NOTE[t.origin]}</span>
+        </div>
+
+        {/* 我核实到哪一层 */}
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-[11px]">
+          <span className="w-8 shrink-0 text-neutral-700">核实</span>
+          <span
+            className={
+              t.verified === "desc"
+                ? "text-amber-500/90"
+                : t.verified === "none"
+                  ? "text-red-400"
+                  : "text-neutral-400"
+            }
+          >
+            {VERIFIED_NOTE[t.verified]}
+          </span>
+        </div>
+
+        <div className="mt-1.5 text-[11px] text-neutral-600">
+          实测 lhs = <code className="text-neutral-500">&quot; {t.key}&quot;</code>(前导空格就是
+          leader);desc = <span className="text-neutral-400">{t.desc}</span>;rhs ={" "}
           <span className="text-neutral-400">
             {t.rhs === null ? "nil(Lua 回调,不是 Ex 字符串)" : t.rhs}
           </span>
@@ -148,7 +177,8 @@ export default function UiToggleDrill() {
           <>
             按 <kbd className="rounded bg-neutral-800 px-1">&lt;Space&gt;</kbd>
             <kbd className="rounded bg-neutral-800 px-1">u</kbd>
-            <kbd className="rounded bg-neutral-800 px-1">{t.key.slice(1)}</kbd> 三下
+            <kbd className="rounded bg-neutral-800 px-1">u</kbd>
+            <kbd className="rounded bg-neutral-800 px-1">{t.key.slice(1)}</kbd> 三下(leader 也要按)
           </>
         }
       />
@@ -178,9 +208,7 @@ export default function UiToggleDrill() {
                     x.key === t.key ? "rounded bg-blue-950 px-1 text-blue-200" : "text-neutral-500"
                   }`}
                 >
-                  <code className="w-9 shrink-0 text-blue-300">
-                    u{x.key.slice(1)}
-                  </code>
+                  <code className="w-20 shrink-0 text-blue-300">{fullKey(x)}</code>
                   <span className="truncate">{x.desc.replace(/^Toggle /, "")}</span>
                 </div>
               ))}
@@ -239,7 +267,7 @@ function OpenPanel({ on, current }: { on: On; current: string }) {
                     : "border-sky-900 text-sky-500"
                 }`}
               >
-                u{k.slice(1)}
+                {fullKey(UI_TOGGLES.find((x) => x.key === k)!)}
                 <span className="ml-1 text-neutral-600">{tg.desc.replace(/^Toggle /, "")}</span>
               </span>
             );

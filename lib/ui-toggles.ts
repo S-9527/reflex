@@ -29,12 +29,31 @@
  * 会教出错的操作感 —— 那比只显示一行文字糟糕得多。
  */
 
+import type { Origin, Verified } from "./provenance";
+
 /** 实测出的映射事实 */
 export type UiToggle = {
   /** 面板键(去掉了前导空格) */
   key: string;
+  /**
+   * ⚠️ 有 leader。实测真实 lhs 是 `" uL"`(前导空格),leader 是 `<Space>`。
+   *   显示和 accept 都必须靠它拼 `<Space>` —— 省了用户就按不出来。
+   */
+  hasLeader: boolean;
   /** 本机 desc,实测自 nvim_get_keymap */
   desc: string;
+  /**
+   * 这个键属于 Vim 原生还是插件 —— 实测核实过,不是凭印象。
+   * 见 lib/provenance.ts 的实测记录。
+   */
+  origin: Origin;
+  /**
+   * 我核实到哪一层。
+   *
+   * ⚠️ 「底层存在」≠「这个键确实改它」。我只核实了存在性
+   * (option 读得到 / Ex exists() / API 非 nil),所以是 `opt`。
+   */
+  verified: Verified;
   /**
    * rhs 实测结果。
    *
@@ -75,161 +94,218 @@ export const UI_TOGGLES: UiToggle[] = [
   // 这两条实测 rhs=nil(回调),效果 headless 测不出。
   {
     key: "uL",
+    hasLeader: true,
     desc: "Toggle Relative Number",
     rhs: null,
     group: "数字与行号",
-    effect: "行号变成当前行绝对、其它行相对",
+    effect: "把当前行行号变成绝对、其它行变成相对(等价 :set relativenumber!)",
+    origin: "LazyVim 键位 → Vim option",
+    verified: "opt",
     visual: "gutter",
   },
   {
     key: "ul",
+    hasLeader: true,
     desc: "Toggle Line Numbers",
     rhs: null,
     group: "数字与行号",
-    effect: "左侧行号栏整列出现或消失",
+    effect: "整列行号出现或消失(等价 :set number!)",
+    origin: "LazyVim 键位 → Vim option",
+    verified: "opt",
     visual: "gutter",
   },
   // ---- 编辑辅助 ----
   {
     key: "us",
+    hasLeader: true,
     desc: "Toggle Spelling",
     rhs: null,
     group: "编辑辅助",
-    effect: "拼错的词底下出现红色波浪线",
+    effect: "拼错的词底下出现红色波浪线(等价 :set spell!)",
+    origin: "LazyVim 键位 → Vim option",
+    verified: "opt",
     visual: "inline",
   },
   {
     key: "uw",
+    hasLeader: true,
     desc: "Toggle Wrap",
     rhs: null,
     group: "编辑辅助",
-    effect: "长行折行显示,左右不再有横向滚动条",
+    effect: "长行折行显示,不再需要横向滚动(等价 :set wrap!)",
+    origin: "LazyVim 键位 → Vim option",
+    verified: "opt",
     visual: "layout",
   },
   {
     key: "uh",
+    hasLeader: true,
     desc: "Toggle Inlay Hints",
     rhs: null,
     group: "编辑辅助",
-    effect: "参数名等灰色提示字浮在代码上面",
+    effect: "参数名等灰色提示字浮在代码上面(Neovim 自带 vim.lsp.inlay_hint)",
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     visual: "inline",
   },
   {
     key: "up",
+    hasLeader: true,
     desc: "Toggle Mini Pairs",
     rhs: null,
     group: "编辑辅助",
-    effect: "括号后浮现对应的闭括号",
+    effect: "光标在闭括号后时,在外面浮现对应的配对括号(纯插件)",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "inline",
   },
   {
     key: "ud",
+    hasLeader: true,
     desc: "Toggle Diagnostics",
     rhs: null,
     group: "编辑辅助",
-    effect: "报错行下方出现诊断说明块",
+    effect: "报错行下方出现诊断说明块(Neovim 自带 vim.diagnostic.set / open_float)",
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     visual: "inline",
   },
   {
     key: "uF",
+    hasLeader: true,
     desc: "Toggle Auto Format (Buffer)",
     rhs: null,
     group: "编辑辅助",
-    effect: "保存时自动格式化,只在当前文件生效",
+    effect: "保存时自动格式化当前文件(conform 插件,只在 buffer 级生效)",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "screen",
   },
   {
     key: "uf",
+    hasLeader: true,
     desc: "Toggle Auto Format (Global)",
     rhs: null,
     group: "编辑辅助",
-    effect: "保存时自动格式化,全局生效",
+    effect: "保存时自动格式化,全局生效(同一个 conform 插件,全局开关)",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "screen",
   },
 
   // ---- 高亮与语法 ----
   {
     key: "uT",
+    hasLeader: true,
     desc: "Toggle Treesitter Highlight",
     rhs: null,
     group: "高亮与语法",
-    effect: "关键字/字符串/注释的语法高亮整体消失",
+    effect: "关键字/字符串/注释的语法高亮由 Treesitter 解析(Neovim 自带 vim.treesitter)",
+    origin: "LazyVim 键位 → Neovim API",
+    verified: "opt",
     visual: "screen",
   },
   {
     key: "ug",
+    hasLeader: true,
     desc: "Toggle Indent Guides",
     rhs: null,
     group: "高亮与语法",
-    effect: "缩进层级出现竖线",
+    effect: "缩进层级出现竖线(纯插件画的)",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "inline",
   },
   {
     key: "ub",
+    hasLeader: true,
     desc: "Toggle Dark Background",
     rhs: null,
     group: "高亮与语法",
-    effect: "深色/浅色背景整体切换",
+    effect: "深色 / 浅色背景切换(等价 :set background=dark / light)",
+    origin: "LazyVim 键位 → Vim option",
+    verified: "opt",
     visual: "screen",
   },
   {
     key: "uc",
+    hasLeader: true,
     desc: "Toggle Conceal Level",
     rhs: null,
     group: "高亮与语法",
-    effect: "长的组合键显示成符号(可逐级加)",
+    effect: "长的组合键显示成符号,可逐级加(等价 :set conceallevel=N)",
+    origin: "LazyVim 键位 → Vim option",
+    verified: "opt",
     visual: "inline",
   },
 
   // ---- 界面外观 ----
   {
     key: "uS",
+    hasLeader: true,
     desc: "Toggle Smooth Scroll",
     rhs: null,
     group: "界面外观",
-    effect: "滚动带缓动",
+    effect: "滚动带缓动;原生只有 scrolljump 这个相关选项,平滑滚动本身是插件行为",
+    origin: "纯插件功能(无原生等价)",
+    verified: "opt",
     visual: "screen",
   },
   {
     key: "ua",
+    hasLeader: true,
     desc: "Toggle Animations",
     rhs: null,
     group: "界面外观",
-    effect: "界面动画开或关",
+    effect: "界面动画开或关(纯插件)",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "screen",
   },
   {
     key: "uD",
+    hasLeader: true,
     desc: "Toggle Dimming",
     rhs: null,
     group: "界面外观",
-    effect: "屏保时屏幕变暗",
+    effect: "闲置时屏幕变暗(纯插件行为)",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "screen",
   },
 
   // ---- 布局 ----
   {
     key: "uZ",
+    hasLeader: true,
     desc: "Toggle Zoom Mode",
     rhs: null,
     group: "布局",
-    effect: "当前窗口占满,再按恢复",
+    effect: "当前窗口占满整个标签页,再按恢复 —— 等价于只留这一个窗口",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "layout",
   },
   {
     key: "uz",
+    hasLeader: true,
     desc: "Toggle Zen Mode",
     rhs: null,
     group: "布局",
-    effect: "关掉状态栏/行号/符号栏,只剩代码",
+    effect: "关掉状态栏 / 行号 / 符号栏,只剩代码",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "layout",
   },
   {
     key: "uA",
+    hasLeader: true,
     desc: "Toggle Tabline",
     rhs: null,
     group: "布局",
-    effect: "顶部标签条出现或消失",
+    effect: "顶部标签条出现或消失(等价 :set showtabline=2)",
+    origin: "LazyVim 键位 → Vim option",
+    verified: "opt",
     visual: "layout",
   },
 
@@ -238,45 +314,60 @@ export const UI_TOGGLES: UiToggle[] = [
   //   页面模型里必须把它们和真开关分开,否则会误导成「可以反复切」。
   {
     key: "ur",
+    hasLeader: true,
     desc: "Redraw / Clear hlsearch / Diff Update",
     // ★ 24 条里**唯一**有真 rhs 的,所以它的效果我实测过。
     rhs: "<Cmd>nohlsearch|diffupdate|normal! <C-L><CR>",
     group: "动作(不是开关)",
-    effect: "重画屏幕、清搜索高亮、刷新 diff",
+    effect: "重画屏幕、清掉搜索高亮、刷新 diff",
+    origin: "Vim 内建 Ex 命令",
+    verified: "rhs",
     visual: "screen",
   },
   {
     key: "un",
+    hasLeader: true,
     desc: "Dismiss All Notifications",
     rhs: null,
     group: "动作(不是开关)",
-    effect: "关掉所有通知(按一次就完了)",
+    effect: "关掉所有通知(纯插件的 notifier)",
+    origin: "纯插件功能(无原生等价)",
+    verified: "desc",
     visual: "screen",
   },
   {
     key: "uC",
+    hasLeader: true,
     desc: "Colorschemes",
     rhs: null,
     // ⚠️ 归在「动作」不是「开关」—— 它是弹出选择器,按一下弹一次,
     // 没有开/关两态。我第一版把它放在「界面外观」组里,单测直接抓出来。
     group: "动作(不是开关)",
-    effect: "弹出配色方案选择器",
+    effect: "弹出配色方案选择器;Ex 命令 :colorscheme 存在,但「选」这个交互是插件的",
+    origin: "纯插件功能(无原生等价)",
+    verified: "opt",
     visual: "screen",
   },
   {
     key: "uI",
+    hasLeader: true,
     desc: "Inspect Tree",
     rhs: null,
     group: "动作(不是开关)",
-    effect: "把 Treesitter 解析树打到消息区",
+    effect: "把 Treesitter 解析树打到消息区;等价 :checkhealth treesitter",
+    origin: "纯插件功能(无原生等价)",
+    verified: "opt",
     visual: "screen",
   },
   {
     key: "ui",
+    hasLeader: true,
     desc: "Inspect Pos",
     rhs: null,
     group: "动作(不是开关)",
-    effect: "把光标位置信息打到消息区",
+    effect: "把光标位置打到消息区(等价 :echo getcurpos(),它是函数不是 Ex 命令)",
+    origin: "Vim 内建 Ex 命令",
+    verified: "opt",
     visual: "screen",
   },
 ];
@@ -333,6 +424,23 @@ export function isToggle(t: UiToggle): boolean {
 
 export function findToggle(key: string): UiToggle | undefined {
   return UI_TOGGLES.find((t) => t.key === key);
+}
+
+/**
+ * 面板上的完整写法 —— 显示和 accept 都走这一个函数。
+ *
+ * ⚠️ 我第一版显示用 `uL`、accept 用 `["<Space>","u","L"]`,两处各写各的,
+ *   结果显示上看着像两键。同一件事只能有一处实现。
+ *   (用户在 /diag 报过同类问题:leader 被省掉了。)
+ */
+export function fullKey(t: UiToggle): string {
+  return t.hasLeader ? `<Space>${t.key}` : t.key;
+}
+
+/** 逐键数组 —— 带 leader 时前面加 `<Space>` */
+export function keySeq(t: UiToggle): string[] {
+  const body = t.key.split("");
+  return t.hasLeader ? ["<Space>", ...body] : body;
 }
 
 export function groupsOf(): ToggleGroup[] {

@@ -208,7 +208,7 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
   }, [boardId]);
 
   const firstKeys = useMemo(
-    () => mergeFirstKeys(task.accept, ...(extraAccept ? [extraAccept] : [])),
+    () => mergeFirstKeys(...task.accept, ...(extraAccept ?? [])),
     [task.accept, extraAccept],
   );
 

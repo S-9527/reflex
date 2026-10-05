@@ -70,7 +70,23 @@ export const SEVERITY_NAME: Record<number, string> = {
  *   所以**只展示键位和它开哪个面板,不假装能渲染**。
  */
 export type DiagKey = {
+  /**
+   * 键位**不含 leader**,就写成面板上那个样子:`[d` `grr` `xx`。
+   *
+   * ⚠️ 但显示和 accept 必须用 `fullKey()` 拼上 leader ——
+   *   实测 Trouble 那一族的真实 lhs 是 `" xx"`(带前导空格,leader 是
+   *   `<Space>`),而 `[d` `grr` 那些**本来就没有 leader**。
+   *   我第一版两边都只写面板键,于是 Trouble 那 11 条全都少了
+   *   `<Space>` —— 用户报出来的。
+   *
+   *   `hasLeader` 字段实测标出来,不要靠猜。
+   */
   key: string;
+  /**
+   * 真实 lhs 前面有没有 leader(实测自 nvim_get_keymap,leader 是 `<Space>`)。
+   * 显示和 accept 都靠它决定要不要拼 `<Space>`。
+   */
+  hasLeader: boolean;
   desc: string;
   /** 实测 rhs。null = Lua 回调 */
   rhs: string | null;
@@ -91,7 +107,10 @@ export type DiagKey = {
   /** 这个键在页面模型里做什么 */
   acts: string;
   /**
-   * 实测存在的**等价键**列表,每条是逐键数组。
+   * 实测存在的**等价键**列表。
+   *
+   * 每条只写 leader **之后**的部分(和 `key` 同一个约定),
+   * 前面要不要补 `<Space>` 由 `hasLeader` 决定。
    *
    * ⚠️ 这里必须是「能真正按出来的键」,不能写成 "sd / sD" 这种
    * 人类可读的说明 —— 我第一版那么写了,结果这些"解法"永远匹配不上,
@@ -100,8 +119,43 @@ export type DiagKey = {
    *
    * 空数组 = 实测没找到等价键,页面上就不显示"或"。
    */
-  alts?: string[][];
+  alts?: string[];
 };
+
+/**
+ * 键位 → 面板上的**完整**写法(带 leader)。
+ *
+ * ⚠️ 显示和 accept 必须走这一个函数。
+ * 我第一版两处各写各的,结果显示的少了 `<Space>`、而 accept 的
+ * 又是对的 —— 于是用户按不出来。同一件事只能有一处实现。
+ */
+export function fullKey(k: DiagKey): string {
+  return k.hasLeader ? `<Space>${k.key}` : k.key;
+}
+
+/** 等价键的完整写法 */
+export function fullAlts(k: DiagKey): string[] {
+  return (k.alts ?? []).map((a) => (k.hasLeader ? `<Space>${a}` : a));
+}
+
+/**
+ * 键位 → 可直接喂给引擎的**逐键**数组(带 leader)。
+ *
+ * ⚠️ 必须逐键拆开:`xx` 带 leader 时是 `["<Space>", "x", "x"]`。
+ * 写成 `["<Space>xx"]` 会让 firstKeySet 收到一个不存在的键。
+ */
+export function keySeq(k: DiagKey): string[] {
+  const body = splitKey(k.key);
+  return k.hasLeader ? ["<Space>", ...body] : body;
+}
+
+/** 等价键的逐键数组 */
+export function altSeqs(k: DiagKey): string[][] {
+  return (k.alts ?? []).map((a) => {
+    const body = splitKey(a);
+    return k.hasLeader ? ["<Space>", ...body] : body;
+  });
+}
 
 /** 哪些键真的会移动「当前停在哪条诊断上」—— 页面模型的适用边界 */
 export function movesCursor(k: DiagKey): boolean {
@@ -129,6 +183,23 @@ export function splitKey(key: string): string[] {
 }
 
 /**
+ * 实测记录:哪些键真的有 leader。
+ *
+ * 用户报「Trouble 那几个有前导键,你给省了」—— 对,而且是我漏的。
+ * 补这一列之后顺手做了全量审计(见 AUDIT_NOTE)。
+ */
+export const LEADER_AUDIT: string[] = [
+  "Trouble 族 6 条(xx xQ xL xX xT cS)实测 lhs 带前导空格 → 有 leader",
+  "等价键 sd / sD / sq / xt / xq 实测也带前导空格 → 同样要补",
+  "跳转族 12 条([d ]d [D ]D [q ]q gr*)实测 lhs **不带**前导空格 → 本来就没有 leader",
+  "所以这两族的按键长度不同:Trouble 三键,跳转两键。别统一处理",
+  "全量扫过 142 条带 leader 的映射,其它页面(/files /buffers /tabs)的显示都是全的",
+];
+
+export const AUDIT_NOTE =
+  "leader 是 LazyVim 设成 <Space> 的(实测 lhs 原文的前导空格)。带 leader 的键要按三下。";
+
+/**
  * 实测自 `nvim_get_keymap("n")`(触发 VeryLazy 之后)。
  *
  * ⚠️ rhs 为 null 的占绝大多数 —— 和 `u*` 一样是 Lua 回调。
@@ -139,6 +210,7 @@ export const DIAG_KEYS: DiagKey[] = [
   // ---- 跳转块:光标在诊断之间移动 ----
   {
     key: "]d",
+    hasLeader: false,
     desc: "Next Diagnostic",
     rhs: null,
     block: "诊断间跳转",
@@ -146,6 +218,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "[d",
+    hasLeader: false,
     desc: "Prev Diagnostic",
     rhs: null,
     block: "诊断间跳转",
@@ -153,6 +226,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "]D",
+    hasLeader: false,
     desc: "Jump to the last diagnostic in the current buffer",
     rhs: null,
     block: "诊断间跳转",
@@ -160,6 +234,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "[D",
+    hasLeader: false,
     desc: "Jump to the first diagnostic in the current buffer",
     rhs: null,
     block: "诊断间跳转",
@@ -167,6 +242,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "]q",
+    hasLeader: false,
     desc: "Next Trouble/Quickfix Item",
     rhs: null,
     block: "列表项跳转",
@@ -174,6 +250,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "[q",
+    hasLeader: false,
     desc: "Previous Trouble/Quickfix Item",
     rhs: null,
     block: "列表项跳转",
@@ -184,6 +261,7 @@ export const DIAG_KEYS: DiagKey[] = [
   // ⚠️ 这一组的 desc 就是 vim.lsp.buf 函数名,实测原文,不是我翻译的。
   {
     key: "grr",
+    hasLeader: false,
     desc: "vim.lsp.buf.references()",
     rhs: null,
     block: "LSP 查询",
@@ -191,6 +269,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "grn",
+    hasLeader: false,
     desc: "vim.lsp.buf.rename()",
     rhs: null,
     block: "LSP 查询",
@@ -198,6 +277,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "gra",
+    hasLeader: false,
     desc: "vim.lsp.buf.code_action()",
     rhs: null,
     block: "LSP 查询",
@@ -205,6 +285,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "gri",
+    hasLeader: false,
     desc: "vim.lsp.buf.implementation()",
     rhs: null,
     block: "LSP 查询",
@@ -212,6 +293,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "grt",
+    hasLeader: false,
     desc: "vim.lsp.buf.type_definition()",
     rhs: null,
     block: "LSP 查询",
@@ -219,6 +301,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "gO",
+    hasLeader: false,
     desc: "vim.lsp.buf.document_symbol()",
     rhs: null,
     block: "LSP 查询",
@@ -229,24 +312,27 @@ export const DIAG_KEYS: DiagKey[] = [
   // ★ 这几条有**真 Ex rhs**,实测原文,已验证能执行。
   {
     key: "xx",
+    hasLeader: true,
     desc: "Diagnostics (Trouble)",
     rhs: "<Cmd>Trouble diagnostics toggle<CR>",
     block: "面板",
     acts: "诊断列表",
-    // 实测同 rhs 的等价键
-    alts: [["s", "d"], ["s", "D"]],
+    // 实测同 rhs 的等价键(leader 之后的部分)
+    alts: ["sd", "sD"],
   },
   {
     key: "xQ",
+    hasLeader: true,
     desc: "Quickfix List (Trouble)",
     rhs: "<Cmd>Trouble qflist toggle<CR>",
     block: "面板",
     acts: "quickfix 列表",
     // 实测 xq 也是 quickfix(rhs=nil 回调)
-    alts: [["x", "q"]],
+    alts: ["xq"],
   },
   {
     key: "xL",
+    hasLeader: true,
     desc: "Location List (Trouble)",
     rhs: "<Cmd>Trouble loclist toggle<CR>",
     block: "面板",
@@ -254,6 +340,7 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "xX",
+    hasLeader: true,
     desc: "Buffer Diagnostics (Trouble)",
     rhs: "<Cmd>Trouble diagnostics toggle filter.buf=0<CR>",
     block: "面板",
@@ -261,15 +348,17 @@ export const DIAG_KEYS: DiagKey[] = [
   },
   {
     key: "xT",
+    hasLeader: true,
     desc: "Todo/Fix/Fixme (Trouble)",
     rhs: null,
     block: "面板",
     acts: "TODO/FIX/FIXME 列表",
     // 实测 xt 也是 todo
-    alts: [["x", "t"]],
+    alts: ["xt"],
   },
   {
     key: "cS",
+    hasLeader: true,
     desc: "LSP references/definitions/... (Trouble)",
     rhs: "<Cmd>Trouble lsp toggle<CR>",
     block: "面板",

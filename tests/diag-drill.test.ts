@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { classify, firstKeySet, mergeFirstKeys } from "../lib/drill";
 import { splitLhs } from "../lib/keys";
-import { DIAG_KEYS, movesCursor, sortedDiags, splitKey } from "../lib/diagnostics";
+import {
+  DIAG_KEYS,
+  altSeqs,
+  findDiagKey,
+  fullAlts,
+  fullKey,
+  keySeq,
+  movesCursor,
+  sortedDiags,
+  splitKey,
+} from "../lib/diagnostics";
 
 /**
  * 把题库接到引擎的判据上 —— 这是唯一能抓住
@@ -17,20 +27,26 @@ import { DIAG_KEYS, movesCursor, sortedDiags, splitKey } from "../lib/diagnostic
 
 /** 和 app/diag/drill.tsx 里构造 TASKS 的逻辑一致 —— 逐键数组 */
 /**
- * 和 app/diag/drill.tsx 里构造 TASKS 的逻辑一致。
+ * 和 app/diag/drill.tsx 里构造 TASKS 的逻辑一致 —— 走**同一个** helper。
  *
- * ⚠️ `.map(splitKey)` 不能写 —— Array.map 会把 `(value, index)` 都传给回调,
- *   于是 splitLhs 收到的是「数组下标」而不是键字符串,静默返回错的东西。
- *   这类 JS 陷阱靠 tsc 抓不到(参数类型恰好兼容),必须写全箭头函数。
+ * ⚠️ 这里不再自己拼,直接用 lib 的 keySeq / altSeqs。
+ *   原来我在测试里重写了一遍 accept 的构造,而那一遍**复制了同样的 bug**
+ *   (都用 [[k.key]]),所以测试全绿而页面按不出来。
+ *   能复用的逻辑就别重写,尤其是在它已经错过一次的地方。
  */
 function acceptOf(key: string): string[][] {
   const k = DIAG_KEYS.find((x) => x.key === key)!;
-  // alts 已经是逐键数组(见「等价键必须是逐键数组」那个测试),
-  // 只有 k.key 需要拆
-  return [splitKey(k.key), ...(k.alts ?? [])];
+  return [keySeq(k), ...altSeqs(k)];
 }
 
-const ALL = DIAG_KEYS.map((k) => acceptOf(k.key));
+/**
+ * ALL = **所有解法摊平成一条条**。
+ *
+ * ⚠️ 必须是 `string[][]`(每条解法一个元素),不是 `string[][][]`。
+ *   mergeFirstKeys 的参数是「一条条解法」,早先它签名写错成
+ *   「一组组解法」,于是摊平层级错了一层,leader 悄悄接不住。
+ */
+const ALL = DIAG_KEYS.flatMap((k) => acceptOf(k.key));
 
 describe("记法字符串 ≠ 逐键序列", () => {
   /**
@@ -126,12 +142,10 @@ describe("题库和引擎对得上", () => {
     }
   });
 
-  it("mergeFirstKeys 收的是每个键的**首键**,不是整个键名", () => {
+  it("mergeFirstKeys 收的是每个键的**首键**(带 leader 的算 <Space>)", () => {
     const merged = mergeFirstKeys(...ALL);
     for (const k of DIAG_KEYS) {
-      // ⚠️ ]d 是两键序列,首键是 "]" 不是 "]d"。
-      //   早先我写成断言 "]d 在集合里",测试红了 —— 是断言错了,不是代码错了。
-      const first = splitKey(k.key)[0];
+      const first = keySeq(k)[0];
       expect(merged.has(first), `${k.key} 的首键 ${first} 不在合并集合里`).toBe(true);
     }
   });
@@ -139,21 +153,18 @@ describe("题库和引擎对得上", () => {
   /**
    * ⚠️ 这是把浏览器里那个 bug 钉住的测试。
    *
-   * 我第一版把 alt 写成 `"sd / sD"` —— 人类可读的说明,不是键序列。
+   * 我第一版把 alts 写成 `"sd / sD"` —— 人类可读的说明,不是键序列。
    * 于是 classify 永远 none,而 none 分支是**放行**,
    * 表现就是「按键完全没反应」,但控制台不报错、UI 正常。
    *
-   * 所以等价键必须是逐键数组,每键都能被接管。
+   * 所以 alts 必须是「一个元素一个键」的写法,不含空格和斜杠。
    */
-  it("等价键必须是逐键数组,不能是 \"sd / sD\" 这种说明文字", () => {
+  it("alts 是「leader 之后的键」写法,不能是 \"sd / sD\" 这种说明", () => {
     for (const k of DIAG_KEYS) {
-      for (const seq of k.alts ?? []) {
-        expect(Array.isArray(seq), `${k.key} 的等价键不是数组`).toBe(true);
-        for (const part of seq) {
-          expect(typeof part, `${k.key} 的等价键里有非字符串`).toBe("string");
-          expect(part, `${k.key} 的等价键里出现了斜杠分隔的说明`).not.toMatch(/[\/\s]/);
-        }
-        expect(seq.length, `${k.key} 的等价键是空的`).toBeGreaterThan(0);
+      for (const alt of k.alts ?? []) {
+        expect(typeof alt, `${k.key} 的等价键不是字符串`).toBe("string");
+        expect(alt, `${k.key} 的等价键里出现了斜杠或空格分隔的说明`).not.toMatch(/[\/\s]/);
+        expect(alt.length, `${k.key} 的等价键是空的`).toBeGreaterThan(0);
       }
     }
   });
@@ -161,7 +172,7 @@ describe("题库和引擎对得上", () => {
   it("等价键的首键也要能接管", () => {
     const merged = mergeFirstKeys(...ALL);
     for (const k of DIAG_KEYS) {
-      for (const seq of k.alts ?? []) {
+      for (const seq of altSeqs(k)) {
         expect(merged.has(seq[0]), `${k.key} 的等价键 ${JSON.stringify(seq)} 首键接不住`).toBe(true);
       }
     }
@@ -232,6 +243,92 @@ describe("边界时必须明确提示,不能静默", () => {
       const starts = [0, 1, Math.floor(n / 2), n - 1];
       const alive = starts.filter((s) => moveIdx(s, k.key, n) !== null);
       expect(alive.length, `${k.key} 所有起点都动不了`).toBeGreaterThan(0);
+    }
+  });
+});
+
+/**
+ * ⚠️⚠️ leader —— 用户报出来的 bug。
+ *
+ * 我第一版把键位统一写成面板上那个样子(`xx` `sd` `cS`),
+ * 显示和 accept 都省掉了 `<Space>`。但实测:
+ *
+ *   Trouble 族的真实 lhs 是 `" xx"` —— **带前导空格**,leader 就是它
+ *   跳转族的 `[d` `grr` 真实 lhs 是 `"[d"` —— **不带**
+ *
+ * 结果 Trouble 那 11 条在页面上写成了两键,实际要按三键,
+ * 用户按不出来。两族长度不同,不能统一处理。
+ */
+describe("leader 不能省", () => {
+  it("Trouble 族实测有 leader", () => {
+    for (const k of DIAG_KEYS.filter((x) => x.block === "面板")) {
+      expect(k.hasLeader, `${k.key} 标成没有 leader,但实测 lhs 带前导空格`).toBe(true);
+    }
+  });
+
+  it("跳转族实测没有 leader", () => {
+    for (const k of DIAG_KEYS.filter((x) => x.block !== "面板")) {
+      expect(k.hasLeader, `${k.key} 标成有 leader,但实测 lhs 不带前导空格`).toBe(false);
+    }
+  });
+
+  it("fullKey 给有 leader 的拼上 <Space>", () => {
+    expect(fullKey(findDiagKey("xx")!)).toBe("<Space>xx");
+    expect(fullKey(findDiagKey("cS")!)).toBe("<Space>cS");
+  });
+
+  it("fullKey 不给无 leader 的乱加", () => {
+    expect(fullKey(findDiagKey("[d")!)).toBe("[d");
+    expect(fullKey(findDiagKey("grr")!)).toBe("grr");
+    // ⚠️ 这条最容易被误加:<Space>grr 在真机上是不存在的
+    expect(fullKey(findDiagKey("grr")!)).not.toContain("<Space>");
+  });
+
+  it("等价键也要带 leader", () => {
+    expect(fullAlts(findDiagKey("xx")!)).toEqual(["<Space>sd", "<Space>sD"]);
+    expect(fullAlts(findDiagKey("xQ")!)).toEqual(["<Space>xq"]);
+  });
+
+  it("keySeq 给有 leader 的逐键数组前面加 <Space>", () => {
+    expect(keySeq(findDiagKey("xx")!)).toEqual(["<Space>", "x", "x"]);
+    expect(keySeq(findDiagKey("[d")!)).toEqual(["[", "d"]);
+    expect(keySeq(findDiagKey("grr")!)).toEqual(["g", "r", "r"]);
+  });
+
+  it("accept 里带 leader 的那些,首键必须是 <Space>", () => {
+    for (const k of DIAG_KEYS) {
+      const seq = keySeq(k);
+      if (k.hasLeader) expect(seq[0], `${k.key} 首键应该是 <Space>`).toBe("<Space>");
+      else expect(seq[0], `${k.key} 不该有 <Space>`).not.toBe("<Space>");
+    }
+  });
+
+  it("两族的按键长度不同:Trouble 三键,跳转两键或三键", () => {
+    const xx = keySeq(findDiagKey("xx")!);
+    expect(xx.length).toBe(3);
+    const bracketD = keySeq(findDiagKey("[d")!);
+    expect(bracketD.length).toBe(2);
+  });
+
+  it("firstKeys 里 <Space> 确实在 —— 否则 leader 按了没反应", () => {
+    const merged = mergeFirstKeys(...ALL);
+    expect(merged.has("<Space>")).toBe(true);
+  });
+
+  it("逐步模拟:Trouble 族按 <Space> 会被接管(不会落 none)", () => {
+    for (const k of DIAG_KEYS.filter((x) => x.block === "面板")) {
+      const accept = acceptOf(k.key);
+      const r = classify(accept, ["<Space>"]);
+      expect(r.kind, `${k.key} 按 <Space> 落到了 none —— leader 接不住`).toBe("prefix");
+    }
+  });
+
+  it("逐步模拟:跳转族按 <Space> 不该被接管(它本来没 leader)", () => {
+    // 这些题的解法里根本没有 <Space>,所以按 <Space> 落到 none 是对的
+    for (const k of DIAG_KEYS.filter((x) => x.block !== "面板")) {
+      const accept = acceptOf(k.key);
+      const r = classify(accept, ["<Space>"]);
+      expect(r.kind, `${k.key} 不该收 <Space>`).toBe("none");
     }
   });
 });

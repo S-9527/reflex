@@ -154,14 +154,45 @@ describe("等价解法", () => {
 });
 
 describe("mergeFirstKeys", () => {
-  it("合并多组解法的第一键", () => {
-    expect(mergeFirstKeys([["v"]], [["h"], ["<Space>", "w", "x"]])).toEqual(
-      new Set(["v", "h", "<Space>"]),
-    );
+  /**
+   * ⚠️ 每个参数是**一条完整解法**,不是一个键。
+   *
+   * 我第一版写成「每个参数是一组解法」,于是
+   * `mergeFirstKeys(["<Space>","u","L"])` 会把它摊平成三个字符串,
+   * 每个 `accept` 变成 "<Space>" 这个**字符串**,取 `seq[0]` 拿到 `"<"`。
+   * 于是 leader 接不住 → 落进 none 分支放行 → 键完全没反应,不报错。
+   *
+   * TypeScript 抓不到(`...seqs: string[][]` 对传 `string[]` 恰好兼容)。
+   */
+  it("一条解法 → 它的第一个键", () => {
+    expect([...mergeFirstKeys(["<Space>", "u", "L"])]).toEqual(["<Space>"]);
+    expect([...mergeFirstKeys(["[", "d"])]).toEqual(["["]);
   });
 
-  it("只有一组时等于 firstKeySet", () => {
-    expect(mergeFirstKeys([["L"], ["]b"]])).toEqual(firstKeySet([["L"], ["]b"]]));
+  it("多条解法各自贡献首键,去重", () => {
+    expect([...mergeFirstKeys(["<Space>", "u", "L"], ["[", "d"], ["<Space>", "b"])]).toEqual([
+      "<Space>",
+      "[",
+    ]);
+  });
+
+  it("⚠️ leader 不会被截成 \"<\"", () => {
+    // 这条是回归测试。坏掉的实现会得到 ["<","u","L"]
+    const s = mergeFirstKeys(["<Space>", "u", "L"]);
+    expect(s.has("<Space>")).toBe(true);
+    expect(s.has("<")).toBe(false);
+  });
+
+  it("空解法被跳过,不产生 undefined", () => {
+    expect([...mergeFirstKeys([], ["L"])]).toEqual(["L"]);
+  });
+
+  it("和 firstKeySet(整组)结果一致", () => {
+    const group = [
+      ["<Space>", "u", "L"],
+      ["[", "d"],
+    ];
+    expect(mergeFirstKeys(...group)).toEqual(firstKeySet(group));
   });
 });
 

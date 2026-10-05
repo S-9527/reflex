@@ -10,8 +10,12 @@ import {
   SEVERITY_NAME,
   SRC,
   countBySeverity,
+  altSeqs,
+  fullAlts,
+  fullKey,
+  keySeq,
+  LEADER_AUDIT,
   movesCursor,
-  splitKey,
   sortedDiags,
   type Diag,
   type DiagKey,
@@ -94,12 +98,17 @@ function startFor(k: DiagKey): St {
 
 const TASKS: DrillTask[] = DIAG_KEYS.map((k) => ({
   id: k.key,
-  short: k.key,
+  // ⚠️ 按钮上也显示完整写法。<Space> 缩写成 S(和 /files 一致),
+  //   不然按钮只写 "xx" 会让人以为两键就能按出来。
+  short: k.hasLeader ? `S${k.key}` : k.key,
   desc: `${k.acts} —— ${k.desc}`,
-  // ⚠️⚠️ 必须逐键拆开。写成 [[k.key]] 的话,[d 会变成一个元素装俩字符,
-  //   firstKeySet 得到 "[d" 而浏览器报的是 "[" → 永远配不上,
-  //   落进 none 分支放行 → 键完全没反应,而且不报错。
-  accept: [splitKey(k.key), ...(k.alts ?? [])],
+  // ⚠️⚠️ 两件事都在这里处理,而且**只有这一处**:
+  //   1. leader —— Trouble 族实测有 leader(真实 lhs 是 " xx"),
+  //      跳转族没有。漏了 leader 用户就按不出来(你报过)。
+  //   2. 逐键拆开 —— 写成 [[k.key]] 的话 [d 会变成一个元素装俩字符,
+  //      firstKeySet 得到 "[d" 而浏览器报的是 "[" → 永远配不上,
+  //      落进 none 分支放行 → 键完全没反应,而且不报错。
+  accept: [keySeq(k), ...altSeqs(k)],
 }));
 
 export default function DiagDrill() {
@@ -187,7 +196,7 @@ export default function DiagDrill() {
 
       <TaskBox>
         <div className="text-neutral-300">
-          按 <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{k.key}</kbd>{" "}
+          按 <kbd className="rounded bg-blue-950 px-2 py-0.5 text-sm text-blue-200">{fullKey(k)}</kbd>{" "}
           {movesCursor(k) ? "把光标移到下一个位置" : k.block === "面板" ? "打开面板" : "问语言服务器一个问题"}
         </div>
         <div className="mt-1 text-neutral-500">{k.acts}</div>
@@ -255,7 +264,7 @@ export default function DiagDrill() {
                     x.key === k.key ? "rounded bg-blue-950 px-1 text-blue-200" : "text-neutral-500"
                   }`}
                 >
-                  <code className="w-9 shrink-0 text-blue-300">{x.key}</code>
+                  <code className="w-20 shrink-0 text-blue-300">{fullKey(x)}</code>
                   <span className="truncate">{x.acts}</span>
                   {x.rhs !== null && <span className="shrink-0 text-green-600/60">Ex</span>}
                 </div>
@@ -267,10 +276,10 @@ export default function DiagDrill() {
 
       <details className="rounded border border-neutral-800 p-2 text-[11px]">
         <summary className="cursor-pointer text-neutral-500">
-          实测记录({PROBE_LOG.length} 条)
+          实测记录({PROBE_LOG.length + LEADER_AUDIT.length} 条)
         </summary>
         <ul className="mt-1 space-y-0.5 text-neutral-600">
-          {PROBE_LOG.map((l) => (
+          {[...PROBE_LOG, ...LEADER_AUDIT].map((l) => (
             <li key={l} className="flex gap-1.5">
               <span className="text-neutral-700">·</span>
               <span>{l}</span>

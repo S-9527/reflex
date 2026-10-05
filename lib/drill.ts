@@ -77,6 +77,28 @@ export function normSeq(seq: string[]): string {
  * 只用**本题的**解法算,不用全集。理由:题目问的是 `diw`,那按 `b` 就该
  * 原样落到浏览器,而不是被训练器吞掉再报一次错。
  */
+/**
+ * 当前题的「第一键」集合 —— idle 时只接管这些键。
+ *
+ * 只用**本题的**解法算,不用全集。理由:题目问的是 `diw`,那按 `b` 就该
+ * 原样落到浏览器,而不是被训练器吞掉再报一次错。
+ *
+ * ⚠️⚠️ 参数是 `string[][]`(一组组解法),不是 `string[]`(一条解法)。
+ *
+ *   firstKeySet([["<Space>", "u", "L"]])  → {"<Space>"}   ✅
+ *   firstKeySet(["<Space>", "u", "L"])    → {"<"}         ❌
+ *
+ * 第二种把每个**字符**当成一条解法,于是取 `seq[0]` 拿到的是 `"<"`。
+ * 后果是 leader 接不住:按 `<Space>` 不被接管 → 落进 none 分支 →
+ * 放行 → 表现为「键完全没反应」,而且不报任何错。
+ *
+ * 这个 bug 藏了很久:签名写成 `string[][]` 时,调用方
+ * `mergeFirstKeys(["<Space>","u","L"])` 传进来的正好是 `string[]`,
+ * TypeScript 看着「像对的」(扩展参数 `...accepts: string[][]`),
+ * 运行时才发现层级错了。
+ *
+ * 所以调用处一律写成 {@link mergeFirstKeys},不要直接调这个函数。
+ */
 export function firstKeySet(accept: string[][]): Set<string> {
   const s = new Set<string>();
   for (const seq of accept) {
@@ -120,8 +142,39 @@ export function shouldTake(buf: string[], firstKeys: Set<string>, vimKey: string
  *
  * `/buffers` 这类 accept 就是全部命令的板块不需要它,留空即可。
  */
-export function mergeFirstKeys(...accepts: string[][][]): Set<string> {
+/**
+ * 把多组解法的第一键合并成一个集合。
+ *
+ * ⚠️⚠️ 每个参数是**一条完整解法**(逐键数组),不是一个键。
+ *
+ * ```ts
+ * mergeFirstKeys(["<Space>", "u", "L"], ["[", "d"])
+ * //                                 ↑ 这是**一条**解法
+ * ```
+ *
+ * 我第一版写成了「每个参数是一组解法」,于是传一条解法进去,
+ * 扩展参数会把它**摊平成几个字符串**:
+ *
+ *   mergeFirstKeys(["<Space>", "u", "L"])
+ *   → accepts = ["<Space>", "u", "L"]     ← 三个字符串!
+ *   → 每个 accept = "<Space>", firstKeySet 取 seq[0] → "<"
+ *
+ * 结果 leader `<Space>` 接不住 → 按第一键不被接管 → 落进 none 分支
+ * → 放行 → 表现为「键完全没反应」,而且**不报任何错**。
+ *
+ * TypeScript 抓不到:`...accepts: string[][]` 对 `mergeFirstKeys([...])`
+ * 恰好类型兼容(把 `string[]` 当 `string[][]` 的元素)。
+ * 只有运行时才暴露。
+ */
+export function mergeFirstKeys(...seqs: string[][]): Set<string> {
   const s = new Set<string>();
-  for (const accept of accepts) for (const k of firstKeySet(accept)) s.add(k);
+  for (const seq of seqs) {
+    if (seq.length > 0) s.add(seq[0]);
+  }
   return s;
+}
+
+/** 解法 → 逐键数组。别手写 `["<Space>", "u", key.slice(1)]`,容易漏 leader */
+export function seqOf(...keys: string[]): string[] {
+  return keys;
 }
