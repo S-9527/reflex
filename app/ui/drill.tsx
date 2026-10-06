@@ -75,10 +75,24 @@ export default function UiToggleDrill() {
   const init = useCallback((): On => [], []);
 
   const apply = useCallback((_seq: string[], on: On, t: DrillTask) => {
-    // 动作类键(ur/un/uI/ui/uC)没有开/关两态,按一下就执行一次。
-    // 模型上仍然记进集合 —— 但界面上会标出「这不是开关」,
-    // 免得用户以为再按一次能「打开」。
-    return on.includes(t.id) ? on.filter((k) => k !== t.id) : [...on, t.id];
+    /**
+     * ⚠️⚠️ 集合里存的是 **`t.key`（本地 key，如 `uL`）**，
+     *      不是 `t.id`（全局 id，如 `n|<Space>uL`）。
+     *
+     * 我上一轮把 `id` 改成全局 id 时漏了这里 —— 于是 `on` 里存的是
+     * 全局 id，而 `OpenPanel` / `MockEditor` 用 `x.key` / `"uL"`
+     * 去查，**永远查不到**：
+     *
+     * - `UI_TOGGLES.find(x => x.key === k)` 返回 undefined
+     * - `isToggle(undefined)` 读 `.group` → **整页崩**
+     *   （`Cannot read properties of undefined (reading 'group')`）
+     *
+     * 判据：这个集合是给**界面渲染**用的（哪些开关开着），
+     * 而界面用的是本地 key。全局 id 只用于进度存储。
+     */
+    // `DrillTask` 上没有 key 字段，用 TASK_OF 反查原题
+    const key = TASK_OF.get(t.id)!.key;
+    return on.includes(key) ? on.filter((k) => k !== key) : [...on, key];
   }, []);
 
   const d = useDrill<On>({
