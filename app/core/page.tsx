@@ -47,6 +47,7 @@ import {
   CORE_TASKS,
   type CoreItem,
 } from "@/lib/core-vim";
+import { diffLines, hasChange } from "@/lib/diff";
 import { translate } from "@/lib/i18n";
 import { formatMs } from "@/lib/session";
 import type { DrillTask } from "@/lib/drill";
@@ -58,7 +59,6 @@ import {
   KeySequence,
   PendingHint,
   Provenance,
-  TaskBar,
   TaskBox,
   streakOf,
 } from "@/lib/drill-ui";
@@ -166,14 +166,45 @@ export default function CorePage() {
           canHint={d.canHint}
           onHint={d.showHint}
         >
-          <TaskBar
-            tasks={tasks}
-            current={tasks.findIndex((t) => t.id === d.task.id)}
-            solvedAll={d.solvedAll}
-            onClear={d.clearProgress}
-            onPick={d.setTaskIndex}
-            onReset={d.reset}
-          />
+          {/*
+            ⚠️⚠️ 这里原来放 `TaskBar`（每道题一个按钮）。
+
+            实测截图看出来的问题：「全部」分类下有 **114 个按钮**，
+            铺成一面墙 —— 把题目区、实测 diff 全挤到屏幕外，
+            而它的唯一作用是「跳到某道题」。114 个键名既扫不过来、
+            也想不出该点哪个。
+
+            `/seq` 早就踩过同一个坑（131 个 leader 键），当时的结论是
+            改成一条轻量的控制行。这里沿用那个做法 —— **上一题 / 跳过 /
+            重来 / 清进度**。要知道「还剩多少」看上面的会话数据条。
+          */}
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-neutral-600">
+              {item.category} · {d.task.short}
+            </span>
+            <div className="ml-auto flex gap-1.5">
+              <button
+                onClick={d.skip}
+                className="rounded border border-neutral-700 px-2 py-0.5 text-neutral-400 hover:bg-neutral-800"
+                title="跳过这一题（记为答错）"
+              >
+                跳过
+              </button>
+              <button
+                onClick={d.reset}
+                className="rounded border border-neutral-700 px-2 py-0.5 text-neutral-400 hover:bg-neutral-800"
+              >
+                重来
+              </button>
+              <button
+                onClick={d.clearProgress}
+                className="rounded border border-neutral-800 px-2 py-0.5 text-neutral-600 hover:bg-neutral-800"
+                title="清掉这个分类的进度（localStorage）"
+              >
+                清进度
+              </button>
+            </div>
+          </div>
 
           <TaskBox>
             <div className="flex flex-wrap items-baseline gap-2 text-[11px] text-neutral-600">
@@ -286,31 +317,16 @@ function MeasuredDiff({ item }: { item: CoreItem }) {
   const after = measured.result;
 
   /**
-   * 逐行算「这一行变了没有」。
+   * 行级 diff（LCS）。
    *
-   * ⚠️ 不能按行号直接比 —— `dd` 会让后面的行整体上移，
-   *    按行号比会显示「下面 9 行全变了」，那是噪音。
-   *    所以按「这一行是不是还在原来的相对位置」粗略判断：
-   *    行数变了就只标第一处差异，不逐行标。
+   * ⚠️ 第一版这里是**按行号直接比**的，而且改过的行掉进了 `else` 分支被标成
+   *    `"same"` —— 后果是 **`→` 箭头一个都不渲染**，界面看起来
+   *    「这个键什么也没做」。实测抓 DOM 才看见。
+   *
+   * 现在用 `diffLines`（纯函数，有单测）：`dd` 删掉第 1 行后，
+   * 后面 9 行会被识别成「没动」，而不是「9 行全变了」。
    */
-  const rows = useMemo(() => {
-    const out: { ln: number; before: string; after: string; kind: "same" | "del" | "add" }[] = [];
-    const n = Math.max(before.length, after.length);
-    for (let i = 0; i < n; i++) {
-      const b = before[i];
-      const a = after[i];
-      if (b === a) {
-        out.push({ ln: i + 1, before: b ?? "", after: a ?? "", kind: "same" });
-      } else if (b !== undefined && a === undefined) {
-        out.push({ ln: i + 1, before: b, after: "", kind: "del" });
-      } else if (b === undefined && a !== undefined) {
-        out.push({ ln: i + 1, before: "", after: a, kind: "add" });
-      } else {
-        out.push({ ln: i + 1, before: b ?? "", after: a ?? "", kind: "same" });
-      }
-    }
-    return out;
-  }, [before, after]);
+  const rows = useMemo(() => diffLines(before, after), [before, after]);
 
   const lineCountChanged = before.length !== after.length;
 
@@ -321,7 +337,9 @@ function MeasuredDiff({ item }: { item: CoreItem }) {
         <span className="text-yellow-500/80">
           光标 → 第 {measured.cursor[0]} 行第 {measured.cursor[1]} 列
         </span>
-        {!measured.changed && <span className="text-neutral-600">（buffer 内容不变，只动光标）</span>}
+        {!hasChange(rows) && (
+          <span className="text-neutral-600">（buffer 内容不变，只动光标）</span>
+        )}
         {lineCountChanged && (
           <span className="text-amber-600/80">
             （行数 {before.length} → {after.length}）
@@ -330,26 +348,44 @@ function MeasuredDiff({ item }: { item: CoreItem }) {
       </div>
 
       <pre className="overflow-x-auto font-mono leading-relaxed">
-        {rows.map((r) => {
-          const isCursorLine = r.ln === measured.cursor[0];
+        {rows.map((r, idx) => {
+          /**
+           * 光标画在 `after` 的那一行上。
+           *
+           * ⚠️ 用 `afterIndex` 而不是 `r.ln` —— 删除行会让行号错位，
+           *    拿显示行号去比会把光标画到错误的一行。
+           */
+          const isCursorLine =
+            r.afterIndex !== null && r.afterIndex + 1 === measured.cursor[0];
           return (
-            <div key={r.ln} className={isCursorLine ? "bg-neutral-900/60" : ""}>
-              <span className="mr-2 inline-block w-5 text-right text-neutral-700">{r.ln}</span>
-              <span className={r.kind === "del" ? "text-red-400/70 line-through" : ""}>
-                {renderWithCursor(r.before, r.ln, measured.cursor, "before")}
+            <div
+              key={idx}
+              data-diff={r.kind}
+              className={isCursorLine ? "bg-neutral-900/60" : ""}
+            >
+              <span className="mr-2 inline-block w-5 text-right text-neutral-700">
+                {r.kind === "del" ? "" : r.ln}
               </span>
               {/*
-                ⚠️ 只在「这一行真的变了」时才画第二行。
-                全都画会变成两份文档并排，看不出改了哪里 ——
-                这一页要的是「差异」，不是「全文」。
+                ⚠️ 三种情况分开画 —— 这就是第一版丢掉的那一支：
+                  same → 普通文本
+                  del  → 红底删除线（这一行没了）
+                  add  → 绿字（这一行是新出现的）
               */}
-              {r.kind !== "same" && (
-                <>
-                  <span className="mx-2 text-neutral-700">→</span>
-                  <span className="text-green-400/80">
-                    {renderWithCursor(r.after, r.ln, measured.cursor, "after")}
-                  </span>
-                </>
+              {r.kind === "same" && (
+                <span className="text-neutral-400">
+                  {r.text ? r.text : <span className="text-neutral-700">（空行）</span>}
+                </span>
+              )}
+              {r.kind === "del" && (
+                <span className="rounded-sm bg-red-950/60 text-red-400/80 line-through">
+                  {r.text ? r.text : "（空行）"}
+                </span>
+              )}
+              {r.kind === "add" && (
+                <span className="rounded-sm bg-green-950/50 text-green-400/90">
+                  {r.text ? renderCursor(r.text, measured.cursor) : "（空行）"}
+                </span>
               )}
             </div>
           );
@@ -369,15 +405,7 @@ function MeasuredDiff({ item }: { item: CoreItem }) {
 }
 
 /** 把光标位置画成黄色背景 */
-function renderWithCursor(
-  text: string,
-  ln: number,
-  cursor: [number, number],
-  phase: "before" | "after",
-) {
-  if (!text) return <span className="text-neutral-700">（空行）</span>;
-  // 光标只在「结果」那一侧标 —— 起始位置在题目区已经说了
-  if (phase !== "after" || ln !== cursor[0]) return text;
+function renderCursor(text: string, cursor: [number, number]) {
   const col = cursor[1] - 1;
   if (col < 0 || col >= text.length) {
     // 光标在行尾之后（比如 `$` 之后）

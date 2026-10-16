@@ -253,6 +253,37 @@ describe("救回「缺 desc 被误排」的内建键", () => {
   });
 
   /**
+   * ⚠️⚠️ 同一个键可以出**多条题**（不同位置 / 不同括号），
+   * 而它们的证据必须**各不相同**。
+   *
+   * 我一开始用 `findIndex` 静默取第一条探针，于是 `{` 那条题
+   * 拿到了 `(` 那条的证据 —— **描述和证据对不上而且不报错**。
+   * 这正是我在生成器里警告过的失败模式，结果自己又踩了一次。
+   *
+   * 现在生成器按 (键, 前置, 位置) 精确匹配，有歧义就**抛错**。
+   * 这里再从数据侧确认一遍：同键多题的证据不重复。
+   */
+  it("同一个键的多条题，实测证据各不相同（位置消歧生效）", () => {
+    const byKey = new Map<string, typeof CORE_ITEMS>();
+    for (const i of CORE_ITEMS) {
+      if (!byKey.has(i.key)) byKey.set(i.key, []);
+      byKey.get(i.key)!.push(i);
+    }
+    const dupes: string[] = [];
+    for (const [key, list] of byKey) {
+      if (list.length < 2) continue;
+      const sigs = list.map((i) => `${i.measured.line}:${i.measured.col}`);
+      if (new Set(sigs).size !== sigs.length) dupes.push(`${key}（位置重复）`);
+    }
+    expect(dupes, `这些键的多条题位置重复，证据会撞车：\n${dupes.join("\n")}`).toEqual([]);
+
+    // `%` 就是「同键多题」的实例 —— 确认它真的有两道、且描述不同
+    const pct = byKey.get("%") ?? [];
+    expect(pct.length, "`%` 应该有两道题（在 ( 上 / 在 { 上）").toBe(2);
+    expect(new Set(pct.map((i) => i.desc)).size).toBe(2);
+  });
+
+  /**
    * ⚠️⚠️ 这条钉的是**对比基准**。
    *
    * 有前置操作时，`before` 必须是**前置跑完**的状态，不是原始文档。

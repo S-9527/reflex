@@ -183,7 +183,10 @@ const SPEC = [
   // 映射（为了别的目的），但没写 desc。
   //
   // 实测确认它们都有确定的、可测的行为，所以补进来。
-  { key: "%", cat: "括号跳转", desc: "跳到配对的括号（光标要正好在括号上）" },
+  // ⚠️ `%` 有两条题（在 `(` 上 / 在 `{` 上）—— 必须用 line/col 消歧，
+  //    否则生成器会报「探针有歧义」而停下（这是有意的，见 findProbe）
+  { key: "%", line: 1, col: 12, cat: "括号跳转", desc: "在 ( 上跳到配对的 )" },
+  { key: "%", line: 1, col: 13, cat: "括号跳转", desc: "在 { 上跳到配对的 }（同一条命令，换个括号也一样）" },
   { key: "g%", cat: "括号跳转", desc: "**反向**跳到配对的括号 —— matchit 提供" },
   { key: "[%", cat: "括号跳转", desc: "跳到**外层**未配对的括号开头 —— matchit 的 Multi 系列" },
   { key: "]%", cat: "括号跳转", desc: "跳到**外层**未配对的括号结尾" },
@@ -236,21 +239,49 @@ const SKIPPED = [
  * 而且它**不报错** —— 描述看着正常，证据是别人的。
  * 这种「描述和证据对不上」比缺数据危险得多，因为看不出来。
  *
- * 现在按 (键, 前置) 精确匹配，并且找不到就**直接抛错**。
+ * ## ⚠️⚠️ 为什么要 `line` / `col` 消歧，而不是「取第一个」
+ *
+ * 同一个 `(键, 前置)` 可能有**多条探针**，而且它们是**不同的题目**：
+ *
+ * ```
+ * %  第 1 行第 12 列 → 从 ( 跳到 )      ← 一条题
+ * %  第 1 行第 13 列 → 从 { 跳到 }      ← 另一条题
+ * ```
+ *
+ * 我一开始写的是 `findIndex(...)` —— 静默取第一条。于是 `{` 那条题
+ * 拿到了 `(` 那条的证据，**描述和证据对不上而且不报错**。
+ * 这正是我在文件头警告过的那个失败模式，结果自己又踩了一次。
+ *
+ * 现在：给了 `line`/`col` 就按位置精确匹配；匹配到多条或一条都没有
+ * 都**直接抛错**，绝不静默取第一条。
  */
-function findProbe(probeKey, pre) {
-  const i = probes.findIndex(
-    (p) => p.key === probeKey && (p.pre || "") === (pre || ""),
+function findProbe(probeKey, pre, line, col) {
+  const matches = probes.filter(
+    (p) =>
+      p.key === probeKey &&
+      (p.pre || "") === (pre || "") &&
+      (line === undefined || p.line === line) &&
+      (col === undefined || p.col === col),
   );
-  if (i < 0) {
-    throw new Error(`找不到探针：键=${JSON.stringify(probeKey)} 前置=${JSON.stringify(pre || "")}`);
+  if (matches.length === 0) {
+    throw new Error(
+      `找不到探针：键=${JSON.stringify(probeKey)} 前置=${JSON.stringify(pre || "")}` +
+        (line !== undefined ? ` 位置=${line}:${col}` : ""),
+    );
   }
-  return probes[i];
+  if (matches.length > 1) {
+    throw new Error(
+      `探针有歧义：键=${JSON.stringify(probeKey)} 前置=${JSON.stringify(pre || "")} ` +
+        `匹配到 ${matches.length} 条（位置 ${matches.map((m) => `${m.line}:${m.col}`).join(" / ")}）` +
+        ` —— 题目里请写明 line/col 消歧，别让它静默取第一条`,
+    );
+  }
+  return matches[0];
 }
 
 const items = SPEC.map((s) => {
   const expect = s.pk ?? s.key;
-  const p = findProbe(expect, s.pre);
+  const p = findProbe(expect, s.pre, s.line, s.col);
   return {
     key: s.key,
     category: s.cat,

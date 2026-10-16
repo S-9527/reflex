@@ -1820,10 +1820,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "l1": 1,
         "c1": 1,
         "l2": 1,
-        "c2": 3
+        "c2": 3,
+        "l1": 1
       },
       "doc": null
     }
@@ -1868,10 +1868,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "l1": 1,
         "c1": 1,
         "l2": 1,
-        "c2": 2147483647
+        "c2": 2147483647,
+        "l1": 1
       },
       "doc": null
     }
@@ -1916,10 +1916,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "l1": 1,
         "c1": 1,
         "l2": 1,
-        "c2": 1
+        "c2": 1,
+        "l1": 1
       },
       "doc": null
     }
@@ -1964,10 +1964,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "l1": 1,
         "c1": 1,
         "l2": 1,
-        "c2": 5
+        "c2": 5,
+        "l1": 1
       },
       "doc": null
     }
@@ -2012,10 +2012,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "l1": 1,
         "c1": 1,
         "l2": 1,
-        "c2": 38
+        "c2": 38,
+        "l1": 1
       },
       "doc": null
     }
@@ -2060,10 +2060,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "l1": 1,
         "c1": 1,
         "l2": 10,
-        "c2": 2147483647
+        "c2": 2147483647,
+        "l1": 1
       },
       "doc": null
     }
@@ -4563,44 +4563,61 @@ export const CORE_ITEMS: CoreItem[] = [
   {
     "key": "%",
     "category": "括号跳转",
-    "desc": "跳到配对的括号（光标要正好在括号上）",
+    "desc": "在 ( 上跳到配对的 )",
     "alts": [],
     "measured": {
       "line": 1,
-      "col": 22,
+      "col": 12,
       "pre": "",
       "ft": null,
       "result": [
-        "local Total = compute(a, b) + 1, tail",
-        "local name = \"hello world\"",
-        "",
-        "function f(x)",
-        "  return { key = 'val' }",
-        "end",
-        "",
-        "-- a paragraph",
-        "second line here",
-        "third line here"
+        "local x = f({ a = 1 })",
+        "end"
       ],
       "cursor": [
         1,
-        27
+        22
       ],
       "changed": false,
       "before": [
-        "local Total = compute(a, b) + 1, tail",
-        "local name = \"hello world\"",
-        "",
-        "function f(x)",
-        "  return { key = 'val' }",
-        "end",
-        "",
-        "-- a paragraph",
-        "second line here",
-        "third line here"
+        "local x = f({ a = 1 })",
+        "end"
       ],
       "selection": null,
-      "doc": null
+      "doc": [
+        "local x = f({ a = 1 })",
+        "end"
+      ]
+    }
+  },
+  {
+    "key": "%",
+    "category": "括号跳转",
+    "desc": "在 { 上跳到配对的 }（同一条命令，换个括号也一样）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 13,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local x = f({ a = 1 })",
+        "end"
+      ],
+      "cursor": [
+        1,
+        21
+      ],
+      "changed": false,
+      "before": [
+        "local x = f({ a = 1 })",
+        "end"
+      ],
+      "selection": null,
+      "doc": [
+        "local x = f({ a = 1 })",
+        "end"
+      ]
     }
   },
   {
