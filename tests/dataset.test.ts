@@ -141,10 +141,22 @@ describe("原生 Ex 等价", () => {
 
 describe("数据完整性", () => {
   it("每条键都能展开成逐键序列", () => {
+    /**
+     * ⚠️ 不能断言「拼回去 === 原串」—— 因为 `splitLhs` 会把**裸空格
+     *    归一成 `<Space>`**（这是必须的，见 `lib/keys.ts` 的说明：
+     *    不加这一条，`[ ` / `] ` / `<C-W> ` 三道题无解）。
+     *
+     * 所以判据改成：**归一化之后**能拼回去。
+     */
+    const normDisplay = (d: string) => d.replace(/ /g, "<Space>");
     for (const b of RAW) {
       const keys = splitLhs(b.display);
       expect(keys.length, `${b.display} 展开成 0 个键`).toBeGreaterThan(0);
-      expect(keys.join(""), `${b.display} 展开后拼不回原串`).toBe(b.display);
+      expect(keys.join(""), `${b.display} 展开后拼不回原串`).toBe(normDisplay(b.display));
+      // 逐键都不能是裸空格（会永远匹配不上 normalize 产出的 <Space>）
+      for (const k of keys) {
+        expect(k, `${b.display} 拆出了裸空格键 —— 永远匹配不上`).not.toBe(" ");
+      }
     }
   });
 

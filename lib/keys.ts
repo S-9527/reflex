@@ -64,8 +64,48 @@ export function normalize(e: {
   }
 
   const named = NAMED[e.key];
-  // 修饰键前缀。先收集,最后一次性拼 —— 否则会出现 <M-<C-a>> 这种嵌套尖括号
+  /**
+   * 修饰键前缀。先收集,最后一次性拼 —— 否则会出现 `<M-<C-a>>` 这种嵌套尖括号。
+   *
+   * ## ⚠️⚠️ 特殊键上的 Shift 必须算进来
+   *
+   * 原来这里只收 Ctrl / Alt，**Shift 被丢掉了** —— 于是：
+   *
+   * ```
+   * 按 Shift+Enter → normalize 产出 "<CR>"    而数据集里是 "<S-CR>"
+   * 按 Shift+Tab   → normalize 产出 "<Tab>"   而数据集里是 "<S-Tab>"
+   * ```
+   *
+   * 实测确认：这两道题（`<S-CR>` Redirect Cmdline、`<S-Tab>` snippet 跳转）
+   * `classify()` 恒返回 `none` —— **按什么都过不了**。
+   *
+   * 和可打印字符不同：那里 Shift 是靠 `e.key` 已经是大写来体现的
+   * （Shift+H → key 就是 "H"），所以不需要额外处理；
+   * 而特殊键的 `e.key` 是 `"Enter"` / `"Tab"` 这种**名字**，
+   * Shift 只能从 `e.shiftKey` 读。
+   *
+   * ⚠️ 顺序按 Vim 记法：`<S-C-...>`（Shift 先于 Ctrl）。
+   */
+  /**
+   * ⚠️⚠️ Shift 只在**特殊键**上才算「修饰键」。
+   *
+   * 可打印字符那边，Shift 已经体现在 `e.key` 里了：
+   *
+   * ```
+   * Shift+w → e.key === "W"   （浏览器直接给大写）
+   * ```
+   *
+   * 所以那里**不能再加 `S-`** —— 加了会产出 `<S-W>`，
+   * 而数据集里是 `W`，**所有大写键全部匹配不上**（实测就是这样红的）。
+   *
+   * 但特殊键的 `e.key` 是 `"Enter"` / `"Tab"` 这种**名字**，
+   * Shift 体现不出来，只能从 `e.shiftKey` 读 —— 不加就会丢，
+   * 于是 `<S-CR>` / `<S-Tab>` 两道题无解（实测确认）。
+   *
+   * 所以：Shift 只在 `named` 那条分支参与拼前缀。
+   */
   const mod: string[] = [];
+  if (named && e.shiftKey) mod.push("S-");
   if (e.ctrlKey) mod.push("C-");
   if (e.altKey) mod.push("M-");
   const modPrefix = mod.join("");
@@ -131,6 +171,30 @@ export function splitLhs(lhs: string): string[] {
         i = end + 1;
         continue;
       }
+    }
+    /**
+     * ⚠️⚠️ 裸空格 → `<Space>` —— 不加这一条，3 道题**无解**。
+     *
+     * `nvim_get_keymap` 报的 lhs 里 leader 是**真空格**，所以
+     * `<Space><Space>` 的原文是 `"  "`，数据集里也保留了这种 display：
+     *
+     * ```
+     * "<C-W> "   ← <C-W> 之后按空格（Window Hydra 入口）
+     * "] "       ← ] 之后按空格（下面开空行）
+     * "[ "       ← [ 之后按空格（上面开空行）
+     * ```
+     *
+     * 裸空格如果原样 `push(" ")`，而 `normalize()`（浏览器事件 → Vim 记法）
+     * 产出的是 `"<Space>"` —— **两边永远匹配不上**。
+     * 实测确认：这 3 道题 `classify()` 恒返回 `none`，**按什么都过不了**，
+     * 而且不报任何错。这是这类工具最要命的 bug。
+     *
+     * ⚠️ 只转空格：`[` `]` `<` 这些本身是合法字符键，不能动。
+     */
+    if (lhs[i] === " ") {
+      out.push("<Space>");
+      i++;
+      continue;
     }
     // 单个字符(可能是 [ ] < 等)
     out.push(lhs[i]);
