@@ -11,7 +11,6 @@ import {
   resize,
   maxOut,
   equalize,
-  zoomIn,
   cycleFocus,
   focusIndex,
   run,
@@ -59,14 +58,12 @@ function applyKey(key: string, cur: { layout: Layout; focus: number }) {
     case "_": { const l = maxOut(cur.layout, cur.focus, "h"); return l ? { layout: l, focus: cur.focus } : null; }
     case "=": { const l = equalize(cur.layout, cur.focus); return l ? { layout: l, focus: cur.focus } : null; }
     // ---- 其他组 ----
-    // 注意:m 的"退出缩放"要靠 prevRef 记住之前的样子,纯函数测不了,
-    // 所以这里只测"进入缩放"这一步(题库也只要求按一次)。
-    case "m": { const l = zoomIn(cur.layout, cur.focus); return l ? { layout: l, focus: cur.focus } : null; }
+    // ⚠️ `m` 已从题库移除（它建模的功能是错的，见 lib/winkeys.ts 的说明）
     case "W": {
       const n = cycleFocus(cur.layout, cur.focus);
       return n === null ? null : { layout: cur.layout, focus: n };
     }
-    case "0": case "1": {
+    case "0": {
       const n = focusIndex(cur.layout, Number(key));
       return n === null ? null : { layout: cur.layout, focus: n };
     }

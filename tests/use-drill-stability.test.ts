@@ -77,13 +77,18 @@ describe("use-drill 的 effect 依赖稳定性", () => {
 });
 
 describe("调用方：传给 hook 的回调要稳定", () => {
-  it("hydra 的 onResetExtra 是 useCallback 包过的", () => {
+  it("hydra 不再需要 onResetExtra（`m` 已从题库移除）", () => {
+    /**
+     * ⚠️ 这条测试原来断言 `onResetExtra: resetZoom` 存在 ——
+     * 那是给「缩放要记住之前布局」用的。
+     *
+     * 但 `m`（zoom）建模错了：`<Space>wm` 实际是**开浮窗**，不改布局
+     * （实测：真实窗口仍是 2 个，只多了浮窗）。所以 `m` 已标 `skip`、
+     * 不再出题，`zoomedRef` / `resetZoom` / `onResetExtra` 全都删了。
+     */
     const hydra = readFileSync(join(__dirname, "../app/windows/hydra.tsx"), "utf8");
-    // 不能是内联箭头函数
-    expect(hydra, "onResetExtra 不该写成内联箭头函数").not.toMatch(/onResetExtra:\s*\(\)\s*=>/);
-    // 该引用一个稳定的东西
-    expect(hydra, "onResetExtra 该引用 useCallback 的结果").toMatch(/onResetExtra:\s*resetZoom/);
-    expect(hydra, "resetZoom 该用 useCallback 包").toMatch(/const resetZoom = useCallback\(/);
+    expect(hydra, "不该再有 resetZoom（它只服务于已删除的 m 题）").not.toMatch(/resetZoom/);
+    expect(hydra, "不该再引用 zoomIn（它建模的功能是错的）").not.toMatch(/zoomIn/);
   });
 });
 

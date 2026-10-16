@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import {
   initial,
   split,
@@ -12,7 +12,6 @@ import {
   resize,
   maxOut,
   equalize,
-  zoomIn,
   cycleFocus,
   focusIndex,
   positions,
@@ -100,7 +99,7 @@ const TASK_OF = new Map<string, Task>(TASKS.map((t, i) => [`${t.key}#${i}`, t]))
 const buildStart = (t: Task): View => run(t.start);
 
 /** 执行一个面板键的效果 */
-function applyKey(key: string, cur: View, zoomedRef: { current: View | null }): View | null {
+function applyKey(key: string, cur: View): View | null {
   switch (key) {
     case "v": {
       const l = split(cur.layout, cur.focus, "v");
@@ -165,18 +164,21 @@ function applyKey(key: string, cur: View, zoomedRef: { current: View | null }): 
       const l = equalize(cur.layout, cur.focus);
       return l ? { layout: l, focus: cur.focus } : null;
     }
-    case "m": {
-      // 缩放要能"再按一次恢复",所以退出走 zoomedRef —— 只进不出等于半个功能。
-      if (zoomedRef.current) {
-        const prev = zoomedRef.current;
-        zoomedRef.current = null;
-        return prev;
-      }
-      const l = zoomIn(cur.layout, cur.focus);
-      if (!l) return null;
-      zoomedRef.current = cur;
-      return { layout: l, focus: cur.focus };
-    }
+    /**
+     * ⚠️ `m` 的分支**删掉了** —— 它建模的功能是错的。
+     *
+     * 原来这里调的是一个"进入缩放"的辅助函数，而它的实现就是
+     * `closeOthers()` ——那是 **`<C-w>o` 的功能**。实测真实 nvim：
+     *
+     * ```
+     * <Space>wm → 真实窗口=2  浮窗=4    ← 其他窗口都还在，布局没动
+     * <Space>wo → 真实窗口=1             ← 这个才是「只留当前窗口」
+     * ```
+     *
+     * `Snacks.zen.zoom()` 是**开一个全屏浮窗**（`width = 0`、`zindex+1`），
+     * 窗口树原样不动。这一页的 `Layout` 模型**表达不了浮窗**，
+     * 硬建模会教出错误的功能 —— 所以 `m` 已标 `skip`，不再出题。
+     */
     case "W": {
       const n = cycleFocus(cur.layout, cur.focus);
       return n === null ? null : { layout: cur.layout, focus: n };
@@ -213,14 +215,6 @@ function toPanelKey(e: KeyboardEvent): string | null {
 }
 
 export default function HydraDrill() {
-  /** 缩放前的样子,再按一次 m 用来恢复 */
-  const zoomedRef = useRef<View | null>(null);
-
-  /** 换题时清掉缩放备份（`onResetExtra` 要用，所以必须是稳定引用） */
-  const resetZoom = useCallback(() => {
-    zoomedRef.current = null;
-  }, []);
-
   const init = useCallback((t: DrillTask) => buildStart(TASK_OF.get(t.id)!), []);
 
   const apply = useCallback(
@@ -229,7 +223,7 @@ export default function HydraDrill() {
       const key = seq[seq.length - 1];
       if (key !== TASK_OF.get(t.id)!.key) return NO_EFFECT;
       // applyKey 返回 null = 当前布局下这个键无效(焦点已在最左之类)
-      return applyKey(key, s, zoomedRef) ?? NO_EFFECT;
+      return applyKey(key, s) ?? NO_EFFECT;
     },
     [],
   );
@@ -245,7 +239,7 @@ export default function HydraDrill() {
     // 面板外的键不该走到这里 —— 引擎只在 extraAccept 命中时才调 onOther
     if (!w) return { text: `✗ ${key} 不在这一页的范围里` };
     if (!w.modeled) return { text: `${key}(${w.desc})—— 这一页还没建模它的效果` };
-    const next = applyKey(key, s, zoomedRef);
+    const next = applyKey(key, s);
     return {
       next: next ?? s,
       text: next
@@ -284,7 +278,6 @@ export default function HydraDrill() {
      * 引擎那边已经改成走 ref 了（双保险），但这里包一下更清楚：
      * **传给 hook 的回调该是稳定的**。
      */
-    onResetExtra: resetZoom,
   });
 
   const task = TASK_OF.get(d.task.id)!;

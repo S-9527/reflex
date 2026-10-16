@@ -411,15 +411,26 @@ export function focusIndex(l: Layout, n: number): number | null {
 }
 
 /**
- * 缩放 —— `<C-w>m`:只留当前窗口,再按一次恢复。
+ * ⚠️⚠️ `zoomIn` **删掉了** —— 它建模的功能是错的。
  *
- * ⚠️ 单靠 Layout 表达不了"再按一次恢复",因为要记住之前的样子。
- * 所以这里只给**进入**缩放的操作(等价于 closeOthers),
- * 退出由调用方保存/恢复 prev —— 组件里用一个 ref 存。
+ * 它原来的实现是 `closeOthers()`，而 `closeOthers` 是 **`<C-w>o`（only）
+ * 的功能**。而 `<C-w>m` / `<Space>wm`（zoom）**根本不做这件事**：
+ *
+ * 实测真实 nvim（2 窗口布局）：
+ *
+ * ```
+ * <Space>wm  →  真实窗口=2  浮窗=4    ← 其他窗口都还在，布局没动
+ * <Space>wo  →  真实窗口=1             ← 这个才是「只留当前窗口」
+ * ```
+ *
+ * `Snacks.zen.zoom()` 是**开一个全屏浮窗覆盖在上面**
+ * （`width = 0` 全宽、`zindex = parent + 1`），窗口树原样不动。
+ * 所以「再按一次」是关浮窗，**不是恢复原布局**。
+ *
+ * 教训：**浮窗表达不了 `Layout` 树**。硬用 `closeOthers` 去近似，
+ * 就教出了一个在真机上不会发生的行为 —— 比漏题更糟。
+ * 现在 `lib/winkeys.ts` 里 `m` 标了 `skip`，不再出题。
  */
-export function zoomIn(l: Layout, focus: number): Layout | null {
-  return closeOthers(l, focus);
-}
 
 /**
  * 交换任意两个窗口 —— `<C-w>Hx` / `<C-w>Jx` 这种两步操作的最后一步。

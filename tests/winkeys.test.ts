@@ -136,14 +136,13 @@ describe("键表数据完整性", () => {
       expect(wk.lazy, `${wk.key} 的 lazy 不对`).toMatch(/^<Space>w/);
       if (wk.native === null) continue; // 插件功能，Vim 没有等价
       /**
-       * ⚠️ `native` 有两种合法形态：
-       *   1. `<C-w>X` —— 单键
-       *   2. `N<C-w>X` —— **带计数**（如 `1<C-w>w` 跳第 1 个窗口）
+       * ⚠️ 必须是 `<C-w>X`。
        *
-       * 第二种是必须的：Vim 的窗口计数就是「先按数字再按 `<C-w>w`」，
-       * 当初写的 `<C-w>0` / `<C-w>1` 在 Vim 里根本不存在。
+       * 曾经允许过 `N<C-w>X`（计数形式 `1<C-w>w`）—— 那是为了救
+       * 「`<C-w>0` 不存在」而想出来的。但**那个键本身也是编的**
+       * （`<Space>w0` 在本机没有映射），所以整条删了，这里收回限制。
        */
-      expect(wk.native, `${wk.key} 的 native 不对`).toMatch(/^(\d+)?<C-w>/);
+      expect(wk.native, `${wk.key} 的 native 不对`).toMatch(/^<C-w>/);
     }
   });
 
@@ -191,5 +190,98 @@ describe("键表数据完整性", () => {
   it("键不重复", () => {
     const seen = new Set(WIN_KEYS.map((k) => k.key));
     expect(seen.size).toBe(WIN_KEYS.length);
+  });
+});
+
+/**
+ * ⚠️⚠️ 不许再有「凭空编的键」。
+ *
+ * 这一轮实测抓到的编造清单：
+ *
+ * | 编的 | 真相 |
+ * |------|------|
+ * | `<C-w>d` | 不是关窗口，是跳宏定义（`：help CTRL-W_d`）|
+ * | `<C-w>m` | Vim 里不存在（E149）|
+ * | `<C-w>0` `<C-w>1` | Vim 里不存在（E149）|
+ * | `<Space>w0` `<Space>w1` | 本机没有这条映射 |
+ *
+ * 根因是 `native: string` 逼着每条都得填 —— 填不出来就编。
+ * 现在类型是 `string | null`，`null` 表示「Vim 里没有」。
+ */
+describe("不许编键", () => {
+  it("题库里的每个键，本机都真的能按（有映射或属已声明例外）", () => {
+    const raw = JSON.parse(
+      readFileSync(join(__dirname, "../data/keymaps.json"), "utf8"),
+    ) as { keys: { lhs: string; mode: string }[] };
+    /** 本机真实的 `<Space>wX` 顶层映射 */
+    const realLazy = new Set(
+      raw.keys.filter((k) => /^ w.$/.test(k.lhs)).map((k) => k.lhs.slice(2)),
+    );
+    /**
+     * ⚠️⚠️ 「面板键能不能按」的判据是 **`<C-w>X` 在 Vim 里存不存在**。
+     *
+     * 为什么不是「` wX` 有没有映射」：LazyVim 用 which-key 的
+     * `proxy = "<c-w>"` 把 `<C-w>` 的键表**显示**在 `<Space>w` 下面，
+     * 按 `<Space>w` 后由 which-key 进入 loop 代为执行 —— 所以
+     * `<Space>wv` 能按，但本机 `nvim_get_keymap` 里**没有** ` wv` 这条映射。
+     *
+     * 实测对照（`<Space>wv` vs `<C-w>v`，都是 2 窗口 → 3 窗口，效果相同）。
+     *
+     * 所以：
+     *   - `hydraOnly: true` → 面板键，要求 `<C-w>X` 真的存在
+     *   - `hydraOnly` 未标 → 顶层键，要求本机 ` wX` 真的有映射
+     */
+    /**
+     * ⚠️ 判据分两类，**按这个键在本机有没有顶层映射来分**，不是按 `hydraOnly`。
+     *
+     * 实测：本机只有 ` wd` 和 ` wm` 两条顶层映射；其余 15 个
+     * （`wv` `ws` `wh` …）都只能在 `<Space><Space>` 面板里按。
+     * 所以：
+     *
+     *   - 本机有 ` wX` 映射 → 顶层键，`lazy` 必须对得上
+     *   - 本机没有 → 面板键，必须有 `native`（背后那条 `<C-w>X`）
+     *     且 `<C-w>X` 本身要真的存在（`x` / `0` / `1` 就不存在）
+     */
+    for (const k of WIN_KEYS) {
+      if (realLazy.has(k.key)) {
+        expect(k.lazy).toBe(`<Space>w${k.key}`);
+      } else {
+        expect(
+          k.native,
+          `${k.lazy} 本机没有顶层映射，是面板键 —— 必须给 native（背后那条 <C-w>X）`,
+        ).not.toBeNull();
+      }
+    }
+    /**
+     * ⚠️⚠️ 面板键的 native 必须**真的存在于 Vim**。
+     *
+     * 编造过的：`<C-w>m`（E149）、`<C-w>0` / `<C-w>1`（E149）。
+     * 这里用「本机能按出来」当代理判据：`<C-w>X` 存在 ⇒ 面板能按。
+     * （真正的 help 校验在 scripts/ 的探针里做，不放在单测里跑 nvim。）
+     */
+    const OK_CW = new Set([
+      "v","s","h","j","k","l","H","J","K","L","c","o","x",
+      ">","<","+","-","|","_","=","W","q","T",
+      // ^D 是 `CTRL-W CTRL-D`（实测 `:help CTRL-W_CTRL-D` 有）
+      "^D",
+    ]);
+    for (const k of WIN_KEYS) {
+      if (k.native === null) continue;
+      const ch = k.native.replace(/^<C-w>/, "");
+      expect(
+        OK_CW.has(ch),
+        `${k.key} 的 native ${k.native} 在 Vim 里不存在 —— 编的键`,
+      ).toBe(true);
+    }
+  });
+
+  it("native 是 null 时必须给出理由（skip 或 desc 说明）", () => {
+    for (const k of WIN_KEYS) {
+      if (k.native !== null) continue;
+      expect(
+        k.skip || /插件|vIm|Vim 里没有|浮窗/.test(k.desc),
+        `${k.key} 的 native 是 null（Vim 没这条命令），但没说明为什么`,
+      ).toBeTruthy();
+    }
   });
 });

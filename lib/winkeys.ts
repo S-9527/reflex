@@ -149,42 +149,77 @@ export const WIN_KEYS: WinKey[] = [
 
   // ---- 其他 ----
   /**
-   * ⚠️⚠️ `native` 曾经写成 `<C-w>m` —— 而 **Vim 里根本没有 `<C-w>m`**。
+   * ⚠️⚠️ `m` 这条有**两个**错，都是用户看页面指出来的。
    *
-   * 实测证据（三条都指向同一结论）：
+   * ### 错 1：`native` 编了一个不存在的键
+   *
+   * 原来写 `<C-w>m` —— **Vim 里根本没这个键**。三条实测都指向同一结论：
    *
    * 1. `:help CTRL-W_m` → **E149: Sorry, no help for CTRL-W_m**
-   * 2. `index.txt` 的窗口命令表里没有 `m`（只有 `+ - < = > F H J K L P R S T W ] ^ _ b c d f h i j k l n o p q r s t v w x z }`）
-   * 3. 真按键实测：`<C-w>m` 在 3 窗口布局下**布局和尺寸都没变**
+   * 2. `index.txt` 的窗口命令表里没有 `m`
+   * 3. 真按键实测：**布局和尺寸都没变**
    *
-   * 那本机 `<Space>wm` 的 rhs 是什么？**空的** —— 它是 Lua 回调：
+   * ### 错 2：**功能描述和建模都是错的**
+   *
+   * 我一直把它当「只留当前窗口」，并建模成 `zoomIn()` ——
+   * 而 `zoomIn()` 的实现就是 `closeOthers()`，也就是 **`<C-w>o` 的功能**。
+   *
+   * 实测（真实 nvim，2 窗口布局）：
    *
    * ```
-   * " wm"   rhs = ""   desc = "Toggle Zoom Mode"
+   * <Space>wm  →  真实窗口=2  浮窗=4    ← 其他窗口都还在！布局没动
+   * <Space>wo  →  真实窗口=1             ← 这个才是「只留当前窗口」
    * ```
    *
-   * 「缩放」是**LazyVim 的插件功能**（snacks.nvim 的 zoom），Vim 没有内建等价。
-   * 所以 `native` 该是 `null`，而不是编一个不存在的键出来。
+   * `Snacks.zen.zoom()` 的实现（`snacks/zen.lua:105-158`）是
+   * **在当前窗口之上开一个占满屏幕的浮窗**（`width = 0` 全宽、
+   * `zindex = parent + 1`），原窗口还在下面。
+   * 所以「再按一次」是**关浮窗**，不是「恢复原布局」。
+   *
+   * **它根本不改布局** —— 是「把当前缓冲区放大到全屏看」。
+   *
+   * ### 所以
+   *
+   * - `native: null`（Vim 没有等价；`<C-w>|` / `<C-w>_` 是把窗口在
+   *   **布局里**拉伸，仍然改布局，不是一回事）
+   * - `modeled: false` —— 这一页的 `Layout` 树模型**表达不了浮窗**。
+   *   硬建模就会像以前那样错成 `closeOthers`，**教出错误的功能**。
    */
-  { key: "m", native: null, lazy: "<Space>wm", alt: "<Space>uZ", desc: "缩放:只留当前窗口,再按恢复", group: "其他", modeled: true },
+  {
+    key: "m",
+    native: null,
+    lazy: "<Space>wm",
+    alt: "<Space>uZ",
+    desc: "放大当前窗口到全屏（浮窗覆盖，不改布局）",
+    group: "其他",
+    modeled: false,
+    skip: "是浮窗覆盖、不改布局 —— 这一页的 Layout 模型表达不了它",
+  },
   { key: "W", native: "<C-w>W", lazy: "<Space>wW", desc: "按顺序轮换焦点(不是几何邻居)", group: "其他", modeled: true, hydraOnly: true },
   { key: "q", native: "<C-w>q", lazy: "<Space>wq", desc: "关掉当前窗口(顺带跳 Alternate File)", group: "其他", modeled: true, hydraOnly: true },
   { key: "T", native: "<C-w>T", lazy: "<Space>wT", desc: "把当前窗口挪到新标签页", group: "其他", modeled: true, hydraOnly: true },
   /**
-   * ⚠️⚠️ `<C-w>0` / `<C-w>1` **在 Vim 里不存在**。
+   * ⚠️⚠️ `0` / `1` 是**凭空编的键**，整条删掉。
    *
-   * 实测：`:help CTRL-W_0` 和 `:help CTRL-W_1` 都是 **E149**；
-   * `index.txt` 的窗口表里也没有这两个；真按键实测「无变化」。
+   * 四条实测证据都指向同一结论：
    *
-   * Vim 的窗口计数命令是 `{count}<C-w>w` / `{count}<C-w>W`：
-   * 先在**面板里**按一个数字当计数，再按 `w`/`W` 跳第 N 个窗口 ——
-   * 不是 `<C-w>0`/`<C-w>1` 这种独立键。
+   * 1. `:help CTRL-W_0` / `:help CTRL-W_1` → **E149**（没这个帮助）
+   * 2. `index.txt` 的窗口命令表里没有 `0` / `1`
+   * 3. 本机 `nvim_get_keymap` 里没有 ` w0` / ` w1` 映射
+   * 4. 真按键实测（固定起点 `*rr1 rr2`）：**`<C-w>0` / `<C-w>1` 无变化**
    *
-   * 而且这两个键**在本机 nvim 里根本不存在映射**（实测 `nvim_get_keymap`
-   * 里没有 ` w0` / ` w1`）—— 也就是说它们连"LazyVim 面板键"都不是，
-   * 是**凭空编的**。所以整条删掉，改用真正的计数写法。
+   * Vim 真正的窗口计数写法是 **`{count}<C-w>w`** ——
+   * 先按数字当计数、再按 `w`。实测：
+   *
+   * ```
+   * 2<C-w>w  *rr1 rr2 → rr1 *rr2      ✓ 跳到第 2 个
+   * 3<C-w>w  *rr1 rr2 → rr1 rr2 *rr3  ✓ 跳到第 3 个
+   * <C-w>0   *rr1 rr2 → *rr1 rr2      ✗ 无变化（这个键不存在）
+   * ```
+   *
+   * 但这是个**两步操作**（数字 + `<C-w>w`），`hydra` 面板里按不到 ——
+   * 面板只收 `<Space>wX` 三段式。所以这一页不练它。
    */
-  { key: "0", native: "1<C-w>w", lazy: "<Space>w0", alt: "<Space>w1", desc: "跳到第 N 个窗口（在面板里按数字当计数，不是独立键）", group: "其他", modeled: true, hydraOnly: true },
   {
     key: "^D",
     native: "<C-w>^D",
@@ -259,8 +294,27 @@ export const TASKS: Task[] = [
    * 它们当初是**凭空编的** —— 所以那两条题练的是不存在的东西。
    * 现在合成一条，教的才是真的：**先按数字当计数，再按 `w`**。
    */
-  { key: "0", desc: "跳到第 N 个窗口（先按数字，再按 w）", start: [{ dir: "v" }, { dir: "v" }, { go: "l" }] },
-  { key: "m", desc: "缩放:只留当前窗口", start: [{ dir: "v" }, { dir: "h" }] },
+  /**
+   * ⚠️ `0` 的题也**删掉了** —— 它练的键（`<Space>w0`）不存在。
+   *
+   * 见 `WIN_KEYS` 里那条说明：`<C-w>0` / `<C-w>1` 在 Vim 里不存在，
+   * 真按键实测无变化。原来那道题教「跳到第 0 个窗口」，
+   * 而「第 0 个」本身也不是 Vim 的说法（计数从 1 开始）。
+   */
+  /**
+   * ⚠️ `m` 的题**删掉了** —— 它练的功能是错的。
+   *
+   * 原来这道题教「缩放:只留当前窗口」，起始布局 `[竖切, 焦点回左]`，
+   * 期望按下后只剩一个窗口 —— 那是 `<C-w>o` 的行为。
+   *
+   * 实测真实 nvim：`<Space>wm` 是**开一个全屏浮窗**，窗口树原样不动
+   * （真实窗口仍是 2 个，只多了浮窗）。所以这道题的「正确答案」
+   * 在真机上按下去**根本不会发生** —— 属于「训练器比真实环境激进」，
+   * 比漏题更糟。
+   *
+   * 这一页的 `Layout` 树模型表达不了浮窗，所以**整条不练**，
+   * 在 `WIN_KEYS` 里标 `skip` 说明原因（页面底部会列出来）。
+   */
   { key: "q", desc: "关掉当前窗口", start: [{ dir: "v" }, { dir: "h" }] },
   { key: "T", desc: "把当前窗口挪走(本标签页只剩其余窗口)", start: [{ dir: "v" }, { dir: "h" }] },
 ];
