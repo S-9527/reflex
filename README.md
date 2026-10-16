@@ -9,7 +9,7 @@ Neovim 肌肉记忆训练器。把本机 LazyVim 的真实键位抽出来，做�
 ```bash
 pnpm install
 pnpm dev          # http://localhost:3000
-pnpm vitest run   # 975 个测试
+pnpm vitest run   # 981 个测试
 npx tsc --noEmit  # 类型检查
 ```
 
@@ -271,21 +271,47 @@ lib/core-vim.ts           ← 115 道题，17 个分组
         —— 题目里请写明 line/col 消歧，别让它静默取第一条
 ```
 
-### ⚠️ 两个只有「跑起来看」才发现的 bug
+### ⚠️ 三个只有「跑起来看」才发现的 bug
 
-数据层全绿、类型检查通过、975 个测试全过 —— 但页面是坏的。
+数据层全绿、类型检查通过、975 个测试全过（当时） —— 但页面是坏的。
 我是装了 headless chromium 抓 DOM 才看见的：
 
 | bug | 症状 | 为什么测试抓不到 |
 |-----|------|-----------------|
 | diff 把「改过的行」当成 `same` | **`→` 箭头一个都不渲染**，看着像「这个键什么也没做」 | 数据层是对的，错的是渲染分支 |
 | `TaskBar` 在 115 题下列成一面墙 | 题目区和实测 diff 全被挤到屏幕外 | 组件本身没错，是**用法**错了（`/seq` 早就因为 131 个按钮踩过同一个坑） |
+| Ctrl 记法大小写不一致 | 按 `<C-R>` **页面刷新了**（看着像「跳回第一关」） | 归一化函数住在 `@/` 别名模块里，vitest import 不了 → 只测了 `normalize`，没测那个壳 |
 
 修法：diff 抽成纯函数 `lib/diff.ts`（LCS，有 `tests/diff.test.ts`）；
-`/core` 改用和 `/seq` 一样的轻量控制行（上一题/跳过/重来/清进度）。
+`/core` 改用和 `/seq` 一样的轻量控制行；`defaultToPanelKey` 改成复用
+`lib/keys.ts` 的 `normalize()`（**别再自己写一张特殊键表**）。
 
-**教训：测试全绿不等于页面能用。** 涉及「渲染分支」和「布局密度」的问题，
-必须真跑起来看 —— 这个项目现在有 975 个测试，仍然漏掉了这两个。
+**教训：测试全绿不等于页面能用。** 涉及「渲染分支」「布局密度」
+「跨模块的一致性」的问题，必须真跑起来看 —— 这个项目现在有 981 个测试，
+仍然漏掉了这三个。第三个尤其典型：**测试测的是隔壁函数，不是出错的那个**。
+
+### Ctrl 记法必须大写
+
+nvim 报的规范写法就是大写（实测 `nvim_get_keymap`）：
+
+```
+desc=redo       lhs="<C-R>"
+desc=halfdown   lhs="<C-D>"
+```
+
+`normalize()` 也产大写 —— 两边一致才匹配得上。手写小写 `<C-r>` 的后果：
+`shouldTake` 返回 false → 不接管 → `preventDefault` 没被调用 →
+**浏览器执行 Ctrl+R 的默认行为（刷新）**。
+
+实测（headless chromium 抓 keydown）：
+
+```
+[{"key":"r","ctrl":true,"prevented":false}]    ← 修前，没拦
+[{"key":"r","ctrl":true,"prevented":true}]     ← 修后
+```
+
+`scripts/build-core.mjs` 有 `normCtrl()` 强制归一化，
+`tests/core-vim.test.ts` 和 `tests/intercept.test.ts` 各钉一条防它漂回去。
 
 ### 数据集内部的覆盖率（原有审计，仍然有效）
 

@@ -279,14 +279,36 @@ function findProbe(probeKey, pre, line, col) {
   return matches[0];
 }
 
+/**
+ * 把 Ctrl 记法统一成**大写**（`<C-r>` → `<C-R>`）。
+ *
+ * ## ⚠️⚠️ 为什么必须归一化
+ *
+ * nvim 报的规范写法是大写 —— 实测 `nvim_get_keymap` 里：
+ *
+ *     desc=redo       lhs="<C-R>"
+ *     desc=halfdown   lhs="<C-D>"
+ *
+ * 而 `lib/keys.ts` 的 `normalize()`（浏览器事件 → Vim 记法）也产大写。
+ * 我手写 SPEC 时图省事写了小写 `<C-r>`，于是**永远匹配不上** ——
+ * 表现为「按 <C-r> 页面刷新了」（浏览器默认行为没被拦）。
+ *
+ * 与其指望以后手写时记得大写，不如在生成阶段**强制归一化**。
+ * `tests/core-vim.test.ts` 再钉一条：题库里不允许出现小写 Ctrl 记法。
+ */
+function normCtrl(key) {
+  return key.replace(/<C-([a-z])>/g, (_, c) => `<C-${c.toUpperCase()}>`);
+}
+
 const items = SPEC.map((s) => {
   const expect = s.pk ?? s.key;
   const p = findProbe(expect, s.pre, s.line, s.col);
   return {
-    key: s.key,
+    // ⚠️ 归一化 Ctrl 记法 —— 见 normCtrl 的说明
+    key: normCtrl(s.key),
     category: s.cat,
     desc: s.desc,
-    alts: s.alts ?? [],
+    alts: (s.alts ?? []).map(normCtrl),
     /**
      * 实测证据 —— 原样来自探针，**不手抄**。
      *

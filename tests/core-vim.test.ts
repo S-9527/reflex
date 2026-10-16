@@ -30,16 +30,16 @@ describe("内建操作数据集：形状", () => {
      *    少任何一个都说明回归了 —— 所以钉死在这里。
      */
     for (const k of [
-      "u", "<C-r>", ".", // 撤销 / 重复
+      "u", "<C-R>", ".", // 撤销 / 重复（⚠️ Ctrl 记法是大写，和 nvim 一致）
       "dd", "yy", "p", "P", "x", "X", "r", "cc", // operator
       "w", "b", "e", "0", "^", "$", "gg", "G", // motion
       "f", "t", "F", "T", ";", ",", // 行内查找
-      "v", "V", "<C-v>", // 可视
+      "v", "V", "<C-V>", // 可视
       "I", "A", "o", "O", // 插入入口
       '"ayy', "@a", "ma", "`a", "'a", // 寄存器 / 标记 / 宏
       ">>", "<<", "==", "J", "gJ", "~", "gUU", "guu", // 缩进 / 大小写
-      "<C-d>", "<C-u>", "<C-f>", "<C-b>", "zt", "zz", "zb", // 滚动
-      "<C-o>", "<C-i>", "g;", "g,", // 跳转
+      "<C-D>", "<C-U>", "<C-F>", "<C-B>", "zt", "zz", "zb", // 滚动
+      "<C-O>", "<C-I>", "g;", "g,", // 跳转
       // ⚠️ 救回来的「缺 desc 被误排」的内建键 —— 见下面专门的 describe
       "%", "g%", "[%", "]%", "a%", // matchit 括号跳转
       "*", "#", // 搜索词
@@ -74,6 +74,41 @@ describe("内建操作数据集：形状", () => {
     for (const c of CORE_CATEGORIES) {
       const n = CORE_ITEMS.filter((i) => i.category === c).length;
       expect(n, `分类 ${c} 一道题都没有`).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * ⚠️⚠️ Ctrl 记法必须是**大写**（`<C-R>` 而不是 `<C-r>`）。
+   *
+   * nvim 报的规范写法就是大写 —— 实测 `nvim_get_keymap`：
+   *
+   *     desc=redo       lhs="<C-R>"
+   *     desc=halfdown   lhs="<C-D>"
+   *
+   * 而 `lib/keys.ts` 的 `normalize()`（浏览器事件 → Vim 记法）也产大写。
+   * 我手写 SPEC 时图省事写了小写，于是**永远匹配不上**：
+   * `shouldTake` 返回 false → 不接管 → `preventDefault` 没被调用 →
+   * 浏览器执行 Ctrl+R 的默认行为（**刷新页面**）。
+   *
+   * 用户报的现象是「按 `<C-r>` 会跳回第一关」—— 那不是跳关，是刷新了。
+   *
+   * 生成器现在有 `normCtrl()` 强制归一化，这里再钉一条防止绕过它。
+   */
+  it("Ctrl 记法是大写（小写会导致按键永远匹配不上）", () => {
+    const bad: string[] = [];
+    for (const i of CORE_ITEMS) {
+      if (/<C-[a-z]>/.test(i.key)) bad.push(`${i.key}（${i.desc}）`);
+    }
+    expect(
+      bad,
+      `这些题目的 Ctrl 记法是小写 —— 按下去永远匹配不上，浏览器会执行默认行为：\n${bad.join("\n")}`,
+    ).toEqual([]);
+    // 反过来确认大写的那几个确实在题库里
+    for (const k of ["<C-R>", "<C-D>", "<C-U>", "<C-V>", "<C-O>", "<C-I>"]) {
+      expect(
+        CORE_ITEMS.some((i) => i.key === k),
+        `${k} 不在题库里`,
+      ).toBe(true);
     }
   });
 });

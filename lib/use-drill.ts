@@ -45,6 +45,7 @@ import {
   type DrillTask,
   type KeyFeedback,
 } from "@/lib/drill";
+import { normalize } from "@/lib/keys";
 import * as SRS from "@/lib/srs";
 import {
   createSession,
@@ -913,14 +914,35 @@ export function useDrill<S>(opts: UseDrillOpts<S>): UseDrill<S> {
   };
 }
 
-/** 浏览器 key → 面板记法的默认实现。各板块可覆盖。 */
+/**
+ * 浏览器事件 → 面板记法的默认实现。各板块可覆盖。
+ *
+ * ## ⚠️⚠️ 为什么必须走 `normalize()`，不能只查一张 NAMED 表
+ *
+ * 原来这里只有一张「特殊键」表，其余一律 `return e.key`。
+ * 于是**带修饰键的字母全部错**：
+ *
+ * ```
+ * 按 Ctrl+R → e.key === "r"   →  返回 "r"
+ * ```
+ *
+ * 而数据集里是 `<C-R>`（nvim 的规范写法，实测 `nvim_get_keymap` 报的就是大写）。
+ * `"r"` 永远匹配不上 `<C-R>` → `shouldTake` 返回 false → **不接管** →
+ * `preventDefault` 没被调用 → 浏览器执行了 Ctrl+R 的默认行为。
+ *
+ * 用户报的现象就是「在 /core 按 `<C-r>` 会跳回第一关」——
+ * 那不是「跳回第一关」，是**页面刷新了**（Ctrl+R = reload）。
+ *
+ * 实测确认（headless chromium 抓 keydown）：
+ *
+ *     [{"key":"r","ctrl":true,"prevented":false}]
+ *                                       ↑ 没被拦下来
+ *
+ * `lib/keys.ts` 的 `normalize()` 本来就是干这个的（修饰键顺序、
+ * Ctrl+字母抬大写、特殊键记法），而且有单测。这里复用它 ——
+ * 各板块再各写一份就是「同一个概念抄四遍」，这个项目在这上面吃过大亏。
+ */
 export function defaultToPanelKey(e: KeyboardEvent): string | null {
-  const NAMED: Record<string, string> = {
-    " ": "<Space>",
-    Tab: "<Tab>",
-    Enter: "<CR>",
-    Escape: "<Esc>",
-    Backspace: "<BS>",
-  };
-  return NAMED[e.key] ?? e.key;
+  const k = normalize(e);
+  return k ? k.vim : null;
 }

@@ -142,7 +142,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-r>",
+    "key": "<C-R>",
     "category": "撤销 / 重复",
     "desc": "重做（撤销的反操作）",
     "alts": [],
@@ -1877,7 +1877,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-v>",
+    "key": "<C-V>",
     "category": "可视模式",
     "desc": "块级可视：竖着选一列（列编辑）",
     "alts": [],
@@ -3486,7 +3486,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-d>",
+    "key": "<C-D>",
     "category": "滚动",
     "desc": "向下滚半屏",
     "alts": [],
@@ -3529,7 +3529,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-u>",
+    "key": "<C-U>",
     "category": "滚动",
     "desc": "向上滚半屏",
     "alts": [],
@@ -3572,7 +3572,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-f>",
+    "key": "<C-F>",
     "category": "滚动",
     "desc": "向下滚一整页",
     "alts": [],
@@ -3615,7 +3615,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-b>",
+    "key": "<C-B>",
     "category": "滚动",
     "desc": "向上滚一整页",
     "alts": [],
@@ -3658,7 +3658,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-e>",
+    "key": "<C-E>",
     "category": "滚动",
     "desc": "向下滚一行（光标不动）",
     "alts": [],
@@ -3701,7 +3701,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-y>",
+    "key": "<C-Y>",
     "category": "滚动",
     "desc": "向上滚一行（光标不动）",
     "alts": [],
@@ -4389,7 +4389,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-o>",
+    "key": "<C-O>",
     "category": "跳转",
     "desc": "跳回上一个位置（跳转历史里往回）",
     "alts": [],
@@ -4432,7 +4432,7 @@ export const CORE_ITEMS: CoreItem[] = [
     }
   },
   {
-    "key": "<C-i>",
+    "key": "<C-I>",
     "category": "跳转",
     "desc": "跳到下一个位置（<C-o> 的反向）",
     "alts": [],
