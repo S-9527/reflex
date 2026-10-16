@@ -42,13 +42,29 @@ describe("板块注册表", () => {
      * ⚠️ 这条很关键：`Item.board` 存的就是 `useDrill` 的 `boardId`。
      *    如果注册表里的 id 和页面上写的不一致，
      *    首页统计就会**永远显示 0**（记录落在别的 key 下）。
+     *
+     * ⚠️⚠️ 这个清单**必须和 `BOARDS` 一一对应**，包括 `/windows` 的四个模式。
+     *
+     * 原来这里只列了 `windows-hydra`，而 `/windows` 页面有四个模式、
+     * 四个 boardId（jump / build / resize / hydra）—— 于是前三者的进度
+     * 落在 `windows-jump` 等 key 下，首页只读 `windows-hydra`，
+     * **练了 13 题首页一点不动**。这条测试当时没抓到，因为它只检查
+     * 「清单里的 id 存在」，不检查「页面用到的 id 都在清单里」。
+     *
+     * 现在两边都完整列出来，且下面有一条专门断言两者**集合相等**。
      */
     const expected = [
+      // /windows 的四个模式 —— 各自独立记进度
+      "windows-jump",
+      "windows-build",
+      "windows-resize",
       "windows-hydra",
       "buffers",
       "tabs",
       "files",
       "text",
+      // Vim 内建操作（nvim_get_keymap 查不到的那一批）
+      "core",
       "ui",
       "diagnostics",
       "search",

@@ -10,7 +10,7 @@ import { SPEC } from "@/lib/textobj";
 import { UI_TOGGLES } from "@/lib/ui-toggles";
 import { DIAG_KEYS } from "@/lib/diagnostics";
 import { RAW } from "@/lib/bindings";
-import { BOARDS as BOARD_DEFS } from "@/lib/boards";
+import { boardCards, type BoardCard } from "@/lib/boards";
 import * as SRS from "@/lib/srs";
 
 /**
@@ -45,9 +45,10 @@ const K = ({ children }: { children: React.ReactNode }) => (
  *    这里只补上首页要用的 JSX 强调 —— 纯文案，不含任何分类逻辑。
  */
 const WHAT: Record<string, React.ReactNode> = {
-  "windows-hydra": (
+  windows: (
     <>
-      分屏、切分、缩放、跳焦点。这一族练的是 <K>&lt;Space&gt;w</K> 面板里的反射
+      分屏、切分、缩放、跳焦点。四个模式：<K>跳转</K> <K>搭建</K> <K>缩放</K>{" "}
+      <K>键位</K>（各自记进度）
     </>
   ),
   buffers: (
@@ -69,6 +70,13 @@ const WHAT: Record<string, React.ReactNode> = {
   text: (
     <>
       <K>diw</K> <K>daw</K> <K>ip</K> <K>i(</K> …。核心是 inner 带不带边缘空白
+    </>
+  ),
+  core: (
+    <>
+      数据集里<b className="text-amber-400">没有</b>的那一批：<K>u</K>{" "}
+      <K>&lt;C-r&gt;</K> <K>.</K> <K>dd</K> <K>yy</K> <K>p</K> <K>f</K> <K>m</K>{" "}
+      <K>q</K> …。它们是 Vim 内建命令，<code>nvim_get_keymap</code> 查不到
     </>
   ),
   ui: (
@@ -115,12 +123,23 @@ export default function HomePage() {
    */
   const byBoard = useMemo(() => SRS.byBoard(progress ?? {}), [progress]);
 
+  /**
+   * 首页要显示的**卡片** —— `/windows` 的四个模式合成一张。
+   *
+   * ⚠️ 用 `boardCards()` 而不是 `BOARDS`：四个窗口模式各自有独立
+   *    boardId 和进度，但在首页并排四张卡会让人以为要去四个地方练。
+   */
+  const cards = useMemo(() => boardCards(), []);
+
   /** 总进度：所有板块的「已掌握」之和 */
   const overall = useMemo(() => {
-    const done = BOARD_DEFS.reduce((a, b) => a + (byBoard[b.id]?.mastered ?? 0), 0);
-    const total = BOARD_DEFS.reduce((a, b) => a + b.total, 0);
+    const done = cards.reduce(
+      (a, c) => a + c.ids.reduce((s, id) => s + (byBoard[id]?.mastered ?? 0), 0),
+      0,
+    );
+    const total = cards.reduce((a, c) => a + c.total, 0);
     return { done, total };
-  }, [byBoard]);
+  }, [byBoard, cards]);
 
   /** 现在该复习的条数 */
   const dueCount = useMemo(
@@ -128,12 +147,14 @@ export default function HomePage() {
     [progress],
   );
 
-  const clearOne = (b: (typeof BOARD_DEFS)[number]) => {
-    if (!confirm(`清掉「${b.name}」的进度?`)) return;
+  /** 清掉一张卡（可能是多个板块）的进度 */
+  const clearCard = (c: BoardCard) => {
+    if (!confirm(`清掉「${c.name}」的进度?`)) return;
     setProgress((prev) => {
       const next = { ...(prev ?? {}) };
+      const ids = new Set(c.ids);
       for (const [id, item] of Object.entries(next)) {
-        if (item.board === b.id) delete next[id];
+        if (ids.has(item.board)) delete next[id];
       }
       SRS.save(next);
       return next;
@@ -201,9 +222,15 @@ export default function HomePage() {
       </div>
 
       <div className="mt-4 space-y-2">
-        {BOARD_DEFS.map((b) => {
-          const st = byBoard[b.id];
-          const done = st?.mastered ?? 0;
+        {cards.map((b) => {
+          /**
+           * 一张卡的进度 = 它下面所有板块的掌握数之和。
+           *
+           * ⚠️ 多板块的卡（`/windows` 的四个模式）必须**求和** ——
+           *    原来首页只读 `windows-hydra`，于是 jump/build/resize
+           *    那 13 题的进度**永远不显示**（实测：练完首页还是 0）。
+           */
+          const done = b.ids.reduce((s, id) => s + (byBoard[id]?.mastered ?? 0), 0);
           const s = { done, total: b.total, left: Math.max(0, b.total - done) };
           const pct = s.total ? (s.done / s.total) * 100 : 0;
           const inner = (
@@ -218,7 +245,9 @@ export default function HomePage() {
               <div className="mt-1 h-1 w-full overflow-hidden rounded bg-neutral-800">
                 <div className="h-full bg-green-500/70" style={{ width: `${pct}%` }} />
               </div>
-              <div className="mt-1 text-[11px] leading-relaxed text-neutral-500">{WHAT[b.id] ?? b.what}</div>
+              <div className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+                {WHAT[b.id] ?? b.what}
+              </div>
             </>
           );
 
@@ -232,7 +261,7 @@ export default function HomePage() {
               </Link>
               <div className="mt-1.5 flex justify-end gap-2 text-[10px]">
                 <button
-                  onClick={() => clearOne(b)}
+                  onClick={() => clearCard(b)}
                   className="text-neutral-700 hover:text-red-400"
                   title="清掉这个板块的进度"
                 >

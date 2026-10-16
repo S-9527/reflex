@@ -134,7 +134,22 @@ export default function SeqPage() {
   const apply = useCallback((_seq: string[], _s: null) => null, []);
 
   const d = useDrill<null>({
-    boardId: `seq-${groupId}`,
+    /**
+     * ⚠️⚠️ 这里**必须**是 `"seq"`，不能带分组后缀。
+     *
+     * 原来是 `seq-${groupId}` —— 于是记录落在 `seq-search` / `seq-other`
+     * 这些 key 下，而 `lib/boards.ts` 注册的板块 id 是 `seq`。
+     * 首页读 `byBoard["seq"]` 永远是 0：**练多少题首页都不动**，
+     * 而且不报任何错。
+     *
+     * 实测复现：`/seq` 练满 3 次，首页仍显示「全键位扫描 0/135」。
+     *
+     * 分组切换不需要分开记进度 —— `Item` 是**全局一张表**，
+     * key 是题目 id（`n|<Space>ff`），同一道题在哪个分组练都是同一条记录。
+     * 「清进度」也只删当前题库里的 id（见 `use-drill.ts` 的 `clearProgress`），
+     * 所以分组级别的清理照样是准的。
+     */
+    boardId: "seq",
     tasks,
     init: () => null,
     apply,

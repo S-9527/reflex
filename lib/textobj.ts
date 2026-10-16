@@ -152,6 +152,57 @@ export const OPERATORS: { key: Operator; desc: string }[] = [
   { key: "v", desc: "选中(进可视模式)" },
 ];
 
+/* ---------------------------------------------------------------- 题库 */
+
+/**
+ * 这一页的题目 —— **题库住在这里，不在页面里**。
+ *
+ * ## ⚠️ 为什么必须搬出来
+ *
+ * 原来 `QUESTIONS` 写在 `app/text/drill.tsx` 里，而 `lib/boards.ts`
+ * 要算首页分母时只能去数 `SPEC.filter(measured).length` —— 得到 **16**，
+ * 而页面实际出的题是 **11**（只有 11 个 (obj,line,col) 组合）。
+ *
+ * 于是首页显示「文本对象 0/16」，而那一页永远只能练 11 题 ——
+ * **分母永远到不了**，进度条永远差 5 格。而且不报任何错。
+ *
+ * 现在题库只有这一份，页面和 `lib/boards.ts` 都从这里读。
+ */
+export type DrillQuestion = {
+  obj: string;
+  line: number;
+  col: number;
+};
+
+export const QUESTIONS: DrillQuestion[] = [
+  { obj: "iw", line: 1, col: 1 },
+  { obj: "aw", line: 1, col: 1 },
+  { obj: "iw", line: 1, col: 7 },
+  { obj: 'i"', line: 2, col: 15 },
+  { obj: 'a"', line: 2, col: 15 },
+  { obj: "i'", line: 5, col: 19 },
+  { obj: "a'", line: 5, col: 19 },
+  { obj: "i(", line: 1, col: 21 },
+  { obj: "a(", line: 1, col: 21 },
+  { obj: "i{", line: 5, col: 12 },
+  { obj: "a{", line: 5, col: 12 },
+];
+
+/**
+ * 题目 id —— **首页分母和页面题库都靠它**。
+ *
+ * ⚠️ 原来 id 在页面里拼成 `${obj}@${line}:${col}#${i}`，
+ *    现在集中到这里，`lib/boards.ts` 直接读长度即可。
+ */
+export function questionId(q: DrillQuestion, i: number): string {
+  return `${q.obj}@${q.line}:${q.col}#${i}`;
+}
+
+/** 题目 id → 题目。页面用它反查光标位置 */
+export const QUESTION_BY_ID = new Map<string, DrillQuestion>(
+  QUESTIONS.map((q, i) => [questionId(q, i), q]),
+);
+
 /**
  * 这一族真正的考点:inner vs around。
  *

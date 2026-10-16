@@ -16,6 +16,22 @@
  * 现在板块定义只有这一份，首页和 `/stats` 都从这里读 ——
  * 加板块也只改一处。
  *
+ * ## ⚠️⚠️ 分母必须是「页面实际出的题数」，不是估算
+ *
+ * 这个文件原来的 `total` 是**手写估的**，于是四个板块的分母和实际题数
+ * 对不上，而且**全都不报错**：
+ *
+ * | 板块 | 原来写的 | 页面实际 | 错因 |
+ * |------|---------|---------|------|
+ * | `/seq` | 235 | 135 | 只减了窗口键，没减「已被专门页面覆盖」和「不能当题干」 |
+ * | `/text` | 16 | 11 | 数的是 `SPEC.filter(measured)`，而题目是 (对象,位置) 组合 |
+ *
+ * 分母虚高的后果不是「数字难看」，是**进度条永远到不了 100%** ——
+ * 用户以为还有题没练，而其实全练完了。
+ *
+ * 所以现在 `total` 一律**从题库真实长度算**，见下面每个板块的注释。
+ * 并且 `tests/board-total.test.ts` 守住这条不变量。
+ *
  * ## 分母为什么用「题库长度」
  *
  * 各板块的题库长度是**用户实际要练的题数**（`BUF_TASKS.length` 等），
@@ -28,11 +44,42 @@ import { TASKS as WIN_TASKS } from "./winkeys";
 import { BUF_TASKS } from "./bufs";
 import { TAB_TASKS } from "./tabs";
 import { FILE_TASKS } from "./files";
-import { SPEC } from "./textobj";
+import { QUESTIONS as TEXT_QUESTIONS } from "./textobj";
 import { UI_TOGGLES } from "./ui-toggles";
 import { DIAG_KEYS } from "./diagnostics";
-import { COMMANDS } from "./bindings";
+import { drillablePool } from "./seq-groups";
+import { CORE_TASKS } from "./core-vim";
 
+/**
+ * 各板块的**去重判据**（`boardCoveredIds` / `coveredByBoard`）搬到了
+ * `lib/coverage.ts` —— 为了断开 `boards ↔ seq-groups` 的循环依赖。
+ *
+ * 这里 re-export 一次，保持老的 import 路径可用（`tests/dedup.test.ts`
+ * 和 `app/seq/page.tsx` 都从 `@/lib/boards` 引）。
+ */
+export { boardCoveredIds, coveredByBoard } from "./coverage";
+
+/**
+ * 窗口的四个模式 —— **每个模式有自己的 `boardId`**。
+ *
+ * ## ⚠️⚠️ 为什么必须显式列出来
+ *
+ * 原来 `BOARDS` 里只有一个 `windows-hydra`（18 题），而 `/windows`
+ * 页面实际上有**四个模式、四个 boardId**：
+ *
+ * ```
+ * windows-jump     5 题（ARENAS）
+ * windows-build    4 题
+ * windows-resize   4 题
+ * windows-hydra   18 题
+ * ```
+ *
+ * 前三者的进度记录落在 `windows-jump` / `windows-build` / `windows-resize`
+ * 下，而首页只读 `windows-hydra` —— 于是**练了 13 题，首页一点不动**。
+ *
+ * 这里把四个都注册成独立板块。它们在首页合成一张卡片显示
+ * （见 `BOARD_GROUPS`），但进度各自统计、各自清空。
+ */
 export type Board = {
   /** 板块 id —— 也是 `lib/srs.ts` 里 `Item.board` 的值 */
   id: string;
@@ -40,7 +87,7 @@ export type Board = {
   name: string;
   /** 一句话说明在练什么（首页显示） */
   what: string;
-  /** 题库条数（用户实际要练的题数） */
+  /** 题库条数（用户实际要练的题数）—— **必须等于页面真实题数** */
   total: number;
   /**
    * 对应的 which-key 分组（能对上的那些）。
@@ -49,17 +96,56 @@ export type Board = {
    * hydra 面板键只在面板里存在），所以 `/stats` 的分组视图覆盖不到它。
    */
   group: string | null;
+  /**
+   * 首页把哪些板块**合成一张卡片**显示。
+   *
+   * ⚠️ 只为 `/windows` 的四个模式准备 —— 它们是同一页的四个页签，
+   *    在首页并排四张卡会让人以为要去四个地方练。
+   *    其他板块 `undefined` = 自己一张卡。
+   */
+  card?: string;
 };
+
+/** 窗口四模式共用的卡片名 —— 首页合成一张 */
+export const WINDOWS_CARD = "windows";
 
 export const BOARDS: Board[] = [
   {
+    id: "windows-jump",
+    href: "/windows",
+    name: "窗口跳转",
+    what: "在已有布局里把焦点移到目标窗口。<C-H/J/K/L>",
+    total: 5, // app/windows/jump.tsx 的 TASKS = ARENAS.length
+    group: null,
+    card: WINDOWS_CARD,
+  },
+  {
+    id: "windows-build",
+    href: "/windows",
+    name: "窗口搭建",
+    what: "用 <Space>| / <Space>- 拼出目标布局",
+    total: 4, // app/windows/build.tsx 的 TASKS
+    group: null,
+    card: WINDOWS_CARD,
+  },
+  {
+    id: "windows-resize",
+    href: "/windows",
+    name: "窗口缩放",
+    what: "<C-方向键> 把窗口调到目标尺寸",
+    total: 4, // app/windows/resize.tsx 的 TASKS
+    group: null,
+    card: WINDOWS_CARD,
+  },
+  {
     id: "windows-hydra",
     href: "/windows",
-    name: "窗口",
-    what: "分屏、切分、缩放、跳焦点。这一族练的是 <Space>w 面板里的反射",
+    name: "窗口键位",
+    what: "照 <Space>w 面板练单个键",
     total: WIN_TASKS.length,
     // ⚠️ hydra 面板键大多不是全局 keymap，所以分组里只有 2 条
     group: "windows",
+    card: WINDOWS_CARD,
   },
   {
     id: "buffers",
@@ -91,8 +177,25 @@ export const BOARDS: Board[] = [
     href: "/text",
     name: "文本对象",
     what: "diw daw ip i( …。核心是 inner 带不带边缘空白",
-    total: SPEC.filter((s) => s.measured).length,
+    /**
+     * ⚠️ 必须数 `QUESTIONS`（页面的真实题目），**不是** `SPEC`。
+     *
+     * `SPEC` 是「对象规格表」，里面有 18 条（含 `iw` 的两次不同位置实测），
+     * 而页面出的题是 (对象, 光标位置) 的组合，共 11 道。
+     * 原来写 `SPEC.filter(measured).length` = 16 —— 分母虚高 5，
+     * 进度条永远差 5 格。
+     */
+    total: TEXT_QUESTIONS.length,
     // ⚠️ 文本对象是 Vim 内建，不在 nvim_get_keymap 的映射表里
+    group: null,
+  },
+  {
+    id: "core",
+    href: "/core",
+    name: "Vim 内建操作",
+    what: "撤销/重做、operator、motion、寄存器、标记、宏 —— 这些在 nvim_get_keymap 里查不到，但每天都要用",
+    total: CORE_TASKS.length,
+    // ⚠️ 这些是 Vim 内建命令，本来就不在 which-key 的分组树里
     group: null,
   },
   {
@@ -116,8 +219,7 @@ export const BOARDS: Board[] = [
     href: "/search",
     name: "搜索跳转",
     what: "n / N 在匹配之间跳，以及 <Esc> 清高亮。核心是「方向感知」—— ? 倒着搜完之后 n 反而往前",
-    // 练的是 n / N / <Esc> 三条（见 app/search/drill.tsx 的题库）
-    total: 8,
+    total: 8, // app/search/drill.tsx 的 QUESTIONS
     group: "search",
   },
   {
@@ -125,13 +227,22 @@ export const BOARDS: Board[] = [
     href: "/seq",
     name: "全键位扫描",
     what: "其余全部键位按序列盲背。按下去只弹面板、没有画面可看的那种",
-    // seq 按形态分组，这里给全量命令数（减去窗口键）
-    total: COMMANDS.filter(
-      (c) =>
-        !/^(Go to (Left|Right|Upper|Lower) Window|Split Window|Delete Window|Move (Up|Down)|(Increase|Decrease) Window)/.test(
-          c.desc,
-        ),
-    ).length,
+    /**
+     * ⚠️⚠️ 必须用 `drillablePool()` 的真实长度。
+     *
+     * 原来写的是「COMMANDS 减去窗口键」= **235**，但 `/seq` 页面
+     * 实际出的题是 `drillablePool()` —— 它还要再减掉：
+     *
+     * 1. 已被专门页面覆盖的（`boardCoveredIds`）
+     * 2. 不能当题干的（空 desc / help 引用 / auto-pairs，`whyNotDrillable`）
+     *
+     * 真实值是 **135**。原来虚高 100 —— 进度条永远到不了头。
+     *
+     * ⚠️ `drillablePool()` 会调 `boardCoveredIds()`，而那个函数住在
+     *    `lib/coverage.ts`（**不是**这个文件）—— 就是为了避免
+     *    `boards ↔ seq-groups` 循环依赖。见 coverage.ts 顶部说明。
+     */
+    total: drillablePool().length,
     group: null,
   },
 ];
@@ -139,79 +250,55 @@ export const BOARDS: Board[] = [
 /** 按 id 查板块 */
 export const BOARD_BY_ID = new Map(BOARDS.map((b) => [b.id, b]));
 
-/* ------------------------------------------------------------------ 去重 */
-
 /**
- * 各**专门页面**已经出的题，映射到全局命令 id。
+ * 首页要显示的分组 —— 把 `/windows` 的四个模式合成一张卡。
  *
- * ## ⚠️ 为什么需要这个
- *
- * `/seq` 是「全键位扫描」，它的描述写的就是「**其余**全部键位」——
- * 意思是已经有专门页面的族不该在这里重复出题。
- *
- * 但实测（见 tests/dedup.test.ts）它和专门页面**重复了 62 条**：
- *
- * ```
- * <Space>u*   界面开关    24 条重复
- * <Tab>*      标签页       7 条重复
- * <Space>f*   文件查找    10 条重复
- * buffers     缓冲区       3 条重复
- * diag        诊断        18 条重复
- * ```
- *
- * 后果：同一条命令在两个页面各练一遍（进度 id 已统一，但**题量虚高**），
- * 而且 `/seq` 的「其余」名不副实。
- *
- * ## 判据
- *
- * 一个命令被专门页面覆盖 = 它的键（含次解）出现在那个板块的题库里。
- *
- * ⚠️ 只有**可视化板块**才算 —— `/seq` 自己不算（它就是要练「其余」的）。
+ * 返回的是**卡片**，每张卡带它下面的板块 id 列表和总题数。
+ * 单板块的卡 `ids` 只有一个元素，首页按同样逻辑渲染即可。
  */
-export function coveredByBoard(): Map<string, string> {
-  const m = new Map<string, string>(); // display → boardId
-  const add = (display: string, boardId: string) => {
-    if (!m.has(display)) m.set(display, boardId);
-  };
+export type BoardCard = {
+  /** 卡片 id（多板块时是 `card` 字段，否则就是板块 id） */
+  id: string;
+  /** 卡片上的链接 */
+  href: string;
+  name: string;
+  what: string;
+  /** 这张卡覆盖的板块 id */
+  ids: string[];
+  /** 总题数 = 各板块之和 */
+  total: number;
+  /** 单板块的卡带上它的 which-key 分组，供首页显示 */
+  group: string | null;
+};
 
-  /**
-   * ⚠️ hydra 的题是**三段式** `<Space>wX`，不是裸面板键。
-   *
-   * 我第一版直接 `add(t.key)`，于是面板里的 `H` / `>` 把
-   * **全局**的 `H`（上一个 buffer）和 `>`（缩进）也标记成「被覆盖」——
-   * 这是两回事：面板键只在 `<Space><Space>` 进入面板后才存在，
-   * 不是全局映射（`lib/winkeys.ts` 里记过这条实测结论）。
-   *
-   * 所以只贡献完整三段式 `display`。
-   */
-  for (const t of WIN_TASKS) add(`<Space>w${t.key}`, "windows-hydra");
-  for (const t of BUF_TASKS) {
-    add(t.key, "buffers");
-    if (t.key.length > 1 && !t.key.startsWith("<")) add(`<Space>${t.key}`, "buffers");
-  }
-  for (const t of TAB_TASKS) add(`<Space>${t.key}`, "tabs");
-  for (const t of FILE_TASKS) add(t.key, "files");
-  for (const t of UI_TOGGLES) add(t.hasLeader ? `<Space>${t.key}` : t.key, "ui");
-  for (const k of DIAG_KEYS) add(k.hasLeader ? `<Space>${k.key}` : k.key, "diagnostics");
+export function boardCards(): BoardCard[] {
+  const out: BoardCard[] = [];
+  const byCard = new Map<string, BoardCard>();
 
-  return m;
-}
-
-/**
- * 这些命令已经有专门页面了（`display` 或次解命中就算）。
- *
- * `/seq` 用它过滤出题库 —— 返回的是**要排除的 id 集合**。
- *
- * ⚠️ 次解也要算：`H` 的次解 `[b` 如果出现在某个专门页面，
- *    那 `H` 本身也该算被覆盖（它们同一条命令）。
- */
-export function boardCoveredIds(commands: { id: string; display: string; alternates: string[] }[]): Set<string> {
-  const byDisplay = coveredByBoard();
-  const out = new Set<string>();
-  for (const c of commands) {
-    if (byDisplay.has(c.display) || c.alternates.some((a) => byDisplay.has(a))) {
-      out.add(c.id);
+  for (const b of BOARDS) {
+    const key = b.card ?? b.id;
+    const existing = byCard.get(key);
+    if (existing) {
+      existing.ids.push(b.id);
+      existing.total += b.total;
+      continue;
     }
+    const card: BoardCard = {
+      id: key,
+      href: b.href,
+      name: b.card ? "窗口" : b.name,
+      what: b.card ? "分屏、切分、缩放、跳焦点 —— 四个模式：跳转 / 搭建 / 缩放 / 键位" : b.what,
+      ids: [b.id],
+      total: b.total,
+      group: b.group,
+    };
+    byCard.set(key, card);
+    out.push(card);
   }
   return out;
+}
+
+/** 一张卡覆盖的板块 id（首页清进度时用） */
+export function cardBoardIds(card: BoardCard): string[] {
+  return card.ids;
 }

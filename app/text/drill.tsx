@@ -4,10 +4,13 @@ import {
   SRC,
   SPEC,
   BARE_LETTERS,
+  QUESTIONS,
+  QUESTION_BY_ID,
+  questionId,
   locate,
   slice,
   findSpec,
-  type ObjSpec,
+  type DrillQuestion,
   type Range,
 } from "@/lib/textobj";
 import type { DrillTask } from "@/lib/drill";
@@ -50,26 +53,6 @@ import { formatMs } from "@/lib/session";
  *
  * 差一个字符,肉眼看不出来,但在真机上会留下多余空格。
  */
-type Q = {
-  obj: string;
-  line: number;
-  col: number;
-};
-
-const QUESTIONS: Q[] = [
-  { obj: "iw", line: 1, col: 1 },
-  { obj: "aw", line: 1, col: 1 },
-  { obj: "iw", line: 1, col: 7 },
-  { obj: 'i"', line: 2, col: 15 },
-  { obj: 'a"', line: 2, col: 15 },
-  { obj: "i'", line: 5, col: 19 },
-  { obj: "a'", line: 5, col: 19 },
-  { obj: "i(", line: 1, col: 21 },
-  { obj: "a(", line: 1, col: 21 },
-  { obj: "i{", line: 5, col: 12 },
-  { obj: "a{", line: 5, col: 12 },
-];
-
 /**
  * ⚠️ 解法是**三键**:`d` + 操作对象。
  *
@@ -84,12 +67,13 @@ const QUESTIONS: Q[] = [
 const OPERATORS = ["d", "c", "y", "v"];
 
 const TASKS: DrillTask[] = QUESTIONS.map((q, i) => ({
-  id: `${q.obj}@${q.line}:${q.col}#${i}`,
+  id: questionId(q, i),
   short: `${q.obj}`,
   desc: SPEC.find((s) => s.key === q.obj)?.desc ?? q.obj,
   accept: OPERATORS.map((op) => [op, ...q.obj.split("")]),
 }));
-const Q_OF = new Map<string, Q>(QUESTIONS.map((q, i) => [`${q.obj}@${q.line}:${q.col}#${i}`, q]));
+/** 题目 id → 题目。id 由 `lib/textobj.ts` 统一生成，见那里的说明 */
+const Q_OF = QUESTION_BY_ID;
 
 export default function TextObjDrill() {
   const d = useDrill<null>({

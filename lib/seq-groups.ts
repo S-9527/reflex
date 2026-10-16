@@ -34,7 +34,7 @@
  */
 
 import { COMMANDS, GROUPS, type Command } from "./bindings";
-import { boardCoveredIds } from "./boards";
+import { boardCoveredIds } from "./coverage";
 
 /** 窗口键交给 `/windows` —— 那里能画出真实分屏树 */
 const WINDOW_NAV =
