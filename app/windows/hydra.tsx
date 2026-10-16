@@ -378,8 +378,22 @@ export default function HydraDrill() {
             )}
             <div className="flex items-baseline gap-2">
               <span className="w-12 shrink-0 text-neutral-600">原生等价</span>
-              <kbd className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">{wk.native}</kbd>
-              <span className="text-neutral-600">只作对照,不作解法</span>
+              {/*
+                ⚠️ `null` = Vim 里没有这条命令（纯插件功能）。
+                不能编一个出来 —— 实测抓到过三处编造：
+                `<C-w>d`（其实不是关窗口，是跳宏定义）、
+                `<C-w>m` / `<C-w>0` / `<C-w>1`（Vim 里**根本不存在**，`:help` 报 E149）。
+              */}
+              {wk.native ? (
+                <>
+                  <kbd className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">
+                    {wk.native}
+                  </kbd>
+                  <span className="text-neutral-600">只作对照,不作解法</span>
+                </>
+              ) : (
+                <span className="text-neutral-600">插件功能,Vim 里没有这条命令</span>
+              )}
             </div>
           </div>
         )}
@@ -433,7 +447,9 @@ function KeyTable({ highlight }: { highlight: string }) {
                 >
                   <span className="w-9 shrink-0 font-bold text-purple-300">{k.key}</span>
                   <span className="w-28 shrink-0 text-blue-400/80">{k.lazy}</span>
-                  <span className="w-24 shrink-0 text-neutral-600">{k.native}</span>
+                  <span className="w-24 shrink-0 text-neutral-600">
+                    {k.native ?? "（Vim 无此命令）"}
+                  </span>
                 </div>
               ))}
             </div>

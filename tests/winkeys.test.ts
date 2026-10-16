@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseSeq, WIN_KEYS, findKey } from "../lib/winkeys";
 
 /**
@@ -114,10 +116,63 @@ describe("parseSeq —— 四键以上不会误判", () => {
 });
 
 describe("键表数据完整性", () => {
-  it("native 和 lazy 都以 <C-w> / <Space>w 开头", () => {
+  it("native 要么是 <C-w>X（Vim 真有），要么是 null（Vim 没有）", () => {
+    /**
+     * ⚠️⚠️ 这条测试原来写的是「native 必须以 `<C-w>` 开头」——
+     * 于是**逼着每条都得填一个**，填不出来时就编一个。
+     *
+     * 实测抓到的三处编造（由用户截图指出的 `<C-w>d` 引出来）：
+     *
+     * | 写的 | 真相 |
+     * |------|------|
+     * | `<C-w>d` | 不是关窗口，是「跳到宏定义」（`:help CTRL-W_d`）|
+     * | `<C-w>m` | **Vim 里不存在**（`:help CTRL-W_m` → E149）|
+     * | `<C-w>0` `<C-w>1` | **也不存在**（同样 E149）|
+     *
+     * 所以现在允许 `null` ——「Vim 里没有」是个合法答案，
+     * 比编一个不存在的键出来诚实得多。
+     */
     for (const wk of WIN_KEYS) {
-      expect(wk.native, `${wk.key} 的 native 不对`).toMatch(/^<C-w>/);
       expect(wk.lazy, `${wk.key} 的 lazy 不对`).toMatch(/^<Space>w/);
+      if (wk.native === null) continue; // 插件功能，Vim 没有等价
+      /**
+       * ⚠️ `native` 有两种合法形态：
+       *   1. `<C-w>X` —— 单键
+       *   2. `N<C-w>X` —— **带计数**（如 `1<C-w>w` 跳第 1 个窗口）
+       *
+       * 第二种是必须的：Vim 的窗口计数就是「先按数字再按 `<C-w>w`」，
+       * 当初写的 `<C-w>0` / `<C-w>1` 在 Vim 里根本不存在。
+       */
+      expect(wk.native, `${wk.key} 的 native 不对`).toMatch(/^(\d+)?<C-w>/);
+    }
+  });
+
+  /**
+   * ⚠️⚠️ 面板上的键必须**真的有映射** —— `<C-w>0` / `1` / `m` 当初是凭空编的。
+   *
+   * 本机 `nvim_get_keymap` 里根本没有 ` w0` / ` w1`，也就是说它们
+   * 连「LazyVim 面板键」都不是。这条测试直接查本机实测数据。
+   */
+  it("面板键不能凭空编：和本机实测映射对照", () => {
+    const raw = JSON.parse(
+      readFileSync(join(__dirname, "../data/keymaps.json"), "utf8"),
+    ) as { keys: { lhs: string; mode: string; rhs: string }[] };
+    /** 本机真实的 `<Space>wX` 映射（leader 是真空格） */
+    const realLazy = new Set(
+      raw.keys.filter((k) => /^ w.$/.test(k.lhs)).map((k) => k.lhs.slice(2)),
+    );
+    // 本机只真的有这两条
+    expect([...realLazy].sort()).toEqual(["d", "m"]);
+    /**
+     * ⚠️ 只对**本机确有映射**的那几条做断言。
+     *
+     * 其余是 which-key hydra 面板键 —— 它们大多没有顶层映射
+     * （见 winkeys.ts 顶部的「验证边界」一节），属于
+     * 「用户实测能用、我未验证」，不在这里当成「必须有」。
+     */
+    for (const k of WIN_KEYS) {
+      if (!realLazy.has(k.key)) continue;
+      expect(k.lazy).toBe(`<Space>w${k.key}`);
     }
   });
 

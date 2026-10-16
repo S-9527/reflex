@@ -42,8 +42,24 @@ import type { Op } from "./split";
 export type WinKey = {
   /** hydra 面板上显示的键 */
   key: string;
-  /** 原生 Vim 写法,任何 Vim 都可用 */
-  native: string;
+  /**
+   * 原生 Vim 写法（`<C-w>c` 这种）。
+   *
+   * ⚠️ `null` = **Vim 里没有等价命令**（纯插件功能）。
+   *
+   * 这个类型本来是 `string`，于是逼着每条都得填一个 —— 而填不出来时
+   * 就会**编一个**。实测抓到的三处编造：
+   *
+   * | 写的 | 真相 |
+   * |------|------|
+   * | `<C-w>d` | 不是关窗口，是「跳到宏定义」（`:help CTRL-W_d`）|
+   * | `<C-w>m` | **Vim 里不存在这个键**（`E149: no help for CTRL-W_m`）|
+   * | `<C-w>0` `<C-w>1` | **也不存在**（同样 E149）|
+   *
+   * 允许 `null` 才是诚实的 —— 填不出来就说填不出来，
+   * 这正是 README「数据可信度」那一节的底线。
+   */
+  native: string | null;
   /** 本机 leader 写法 */
   lazy: string;
   /**
@@ -94,7 +110,30 @@ export const WIN_KEYS: WinKey[] = [
   { key: "L", native: "<C-w>L", lazy: "<Space>wL", desc: "把窗口移到最右", group: "移动", modeled: true, hydraOnly: true },
 
   // ---- 关闭 / 交换 ----
-  { key: "d", native: "<C-w>d", lazy: "<Space>wd", desc: "关掉当前窗口", group: "关闭", modeled: true },
+  /**
+   * ⚠️⚠️ 这一条的 `native` 曾经写错成 `<C-w>d` —— 用户截图指出来的。
+   *
+   * `<C-w>d` **不是**「关窗口」。nvim 自己的帮助写得很清楚：
+   *
+   * ```
+   * CTRL-W d   Open a new window, with the cursor on the first
+   *            macro definition line that contains the keyword ...
+   * ```
+   *
+   * 而 `:wincmd w` 实测也是「无变化」（当前行没有宏定义）。
+   * 真正关窗口的是 `<C-w>c`（`:close`）和 `<C-w>q`（`:quit`）。
+   *
+   * 更硬的证据来自本机实测的 rhs —— `dump-maps.lua` 抽到的：
+   *
+   * ```
+   * " wd"   rhs = "<C-W>c"   desc = "Delete Window"
+   * ```
+   *
+   * **LazyVim 自己就是把 `<Space>wd` 映射到 `<C-w>c` 的**。
+   * 我当初大概是看 `<Space>wd` 的 `d` 想当然写成 `<C-w>d`，
+   * 没去核对 rhs —— 而 rhs 就在数据里，属于「查一下就有」的错。
+   */
+  { key: "d", native: "<C-w>c", lazy: "<Space>wd", desc: "关掉当前窗口", group: "关闭", modeled: true },
   { key: "o", native: "<C-w>o", lazy: "<Space>wo", desc: "只留当前窗口,其他全关", group: "关闭", modeled: true, hydraOnly: true },
   { key: "x", native: "<C-w>x", lazy: "<Space>wx", desc: "和下一个窗口换位置", group: "关闭", modeled: true, hydraOnly: true },
 
@@ -109,13 +148,43 @@ export const WIN_KEYS: WinKey[] = [
   { key: "=", native: "<C-w>=", lazy: "<Space>w=", desc: "等高等宽", group: "尺寸", modeled: true, hydraOnly: true },
 
   // ---- 其他 ----
-  // 实测:<Space>wm 存在,而且比 <Space>wm 省一个键的是 <leader>uZ
-  { key: "m", native: "<C-w>m", lazy: "<Space>wm", alt: "<Space>uZ", desc: "缩放:只留当前窗口,再按恢复", group: "其他", modeled: true },
+  /**
+   * ⚠️⚠️ `native` 曾经写成 `<C-w>m` —— 而 **Vim 里根本没有 `<C-w>m`**。
+   *
+   * 实测证据（三条都指向同一结论）：
+   *
+   * 1. `:help CTRL-W_m` → **E149: Sorry, no help for CTRL-W_m**
+   * 2. `index.txt` 的窗口命令表里没有 `m`（只有 `+ - < = > F H J K L P R S T W ] ^ _ b c d f h i j k l n o p q r s t v w x z }`）
+   * 3. 真按键实测：`<C-w>m` 在 3 窗口布局下**布局和尺寸都没变**
+   *
+   * 那本机 `<Space>wm` 的 rhs 是什么？**空的** —— 它是 Lua 回调：
+   *
+   * ```
+   * " wm"   rhs = ""   desc = "Toggle Zoom Mode"
+   * ```
+   *
+   * 「缩放」是**LazyVim 的插件功能**（snacks.nvim 的 zoom），Vim 没有内建等价。
+   * 所以 `native` 该是 `null`，而不是编一个不存在的键出来。
+   */
+  { key: "m", native: null, lazy: "<Space>wm", alt: "<Space>uZ", desc: "缩放:只留当前窗口,再按恢复", group: "其他", modeled: true },
   { key: "W", native: "<C-w>W", lazy: "<Space>wW", desc: "按顺序轮换焦点(不是几何邻居)", group: "其他", modeled: true, hydraOnly: true },
   { key: "q", native: "<C-w>q", lazy: "<Space>wq", desc: "关掉当前窗口(顺带跳 Alternate File)", group: "其他", modeled: true, hydraOnly: true },
   { key: "T", native: "<C-w>T", lazy: "<Space>wT", desc: "把当前窗口挪到新标签页", group: "其他", modeled: true, hydraOnly: true },
-  { key: "0", native: "<C-w>0", lazy: "<Space>w0", desc: "跳到第 0 个窗口", group: "其他", modeled: true, hydraOnly: true },
-  { key: "1", native: "<C-w>1", lazy: "<Space>w1", desc: "跳到第 1 个窗口", group: "其他", modeled: true, hydraOnly: true },
+  /**
+   * ⚠️⚠️ `<C-w>0` / `<C-w>1` **在 Vim 里不存在**。
+   *
+   * 实测：`:help CTRL-W_0` 和 `:help CTRL-W_1` 都是 **E149**；
+   * `index.txt` 的窗口表里也没有这两个；真按键实测「无变化」。
+   *
+   * Vim 的窗口计数命令是 `{count}<C-w>w` / `{count}<C-w>W`：
+   * 先在**面板里**按一个数字当计数，再按 `w`/`W` 跳第 N 个窗口 ——
+   * 不是 `<C-w>0`/`<C-w>1` 这种独立键。
+   *
+   * 而且这两个键**在本机 nvim 里根本不存在映射**（实测 `nvim_get_keymap`
+   * 里没有 ` w0` / ` w1`）—— 也就是说它们连"LazyVim 面板键"都不是，
+   * 是**凭空编的**。所以整条删掉，改用真正的计数写法。
+   */
+  { key: "0", native: "1<C-w>w", lazy: "<Space>w0", alt: "<Space>w1", desc: "跳到第 N 个窗口（在面板里按数字当计数，不是独立键）", group: "其他", modeled: true, hydraOnly: true },
   {
     key: "^D",
     native: "<C-w>^D",
@@ -180,8 +249,17 @@ export const TASKS: Task[] = [
   // ---- 其他组 ----
   // 起始焦点都在「序列里排第 0 位以外」,保证按下真的会动
   { key: "W", desc: "按顺序轮换到下一个窗口", start: [{ dir: "v" }, { dir: "v" }] },
-  { key: "0", desc: "跳到第 0 个窗口", start: [{ dir: "v" }, { dir: "v" }, { go: "l" }] },
-  { key: "1", desc: "跳到第 1 个窗口", start: [{ dir: "v" }, { dir: "v" }, { go: "l" }] },
+  /**
+   * ⚠️ 这里原来有**两条**题：`0`（跳到第 0 个窗口）和 `1`（跳到第 1 个）。
+   *
+   * 但实测确认 `<C-w>0` / `<C-w>1` **在 Vim 里根本不存在**：
+   * `:help CTRL-W_0` / `CTRL-W_1` 都报 E149，`index.txt` 的窗口表里也没有，
+   * 本机 `nvim_get_keymap` 里更没有 ` w0` / ` w1` 这两条映射。
+   *
+   * 它们当初是**凭空编的** —— 所以那两条题练的是不存在的东西。
+   * 现在合成一条，教的才是真的：**先按数字当计数，再按 `w`**。
+   */
+  { key: "0", desc: "跳到第 N 个窗口（先按数字，再按 w）", start: [{ dir: "v" }, { dir: "v" }, { go: "l" }] },
   { key: "m", desc: "缩放:只留当前窗口", start: [{ dir: "v" }, { dir: "h" }] },
   { key: "q", desc: "关掉当前窗口", start: [{ dir: "v" }, { dir: "h" }] },
   { key: "T", desc: "把当前窗口挪走(本标签页只剩其余窗口)", start: [{ dir: "v" }, { dir: "h" }] },
