@@ -59,6 +59,7 @@ import {
   KeySequence,
   PendingHint,
   Provenance,
+  RichText,
   TaskBox,
   streakOf,
 } from "@/lib/drill-ui";
@@ -214,7 +215,7 @@ export default function CorePage() {
                 <span className="text-amber-600/80">· 先按 {item.measured.pre}</span>
               )}
             </div>
-            <div className="mt-2 text-neutral-200">{item.desc}</div>
+            <div className="mt-2 text-neutral-200"><RichText>{item.desc}</RichText></div>
 
             <div className="mt-3">
               <KeySequence keys={d.shownKeys} feed={d.keyFeed} />
@@ -337,7 +338,20 @@ function MeasuredDiff({ item }: { item: CoreItem }) {
         <span className="text-yellow-500/80">
           光标 → 第 {measured.cursor[0]} 行第 {measured.cursor[1]} 列
         </span>
-        {!hasChange(rows) && (
+        {/*
+          ⚠️⚠️ 三种情况必须分开说，不能混成一句「内容不变」。
+          
+          `za` 改的是**折叠状态**、`gt` 改的是**当前标签页** ——
+          它们的 buffer 文本和光标都不动，但**确实生效了**。
+          只写「内容不变」会让用户以为这个键没用。
+        */}
+        {measured.foldChanged && (
+          <span className="text-blue-400/80">（改的是**折叠状态**，文本不动）</span>
+        )}
+        {measured.tabsChanged && (
+          <span className="text-blue-400/80">（改的是**当前标签页**，文本不动）</span>
+        )}
+        {!hasChange(rows) && !measured.foldChanged && !measured.tabsChanged && (
           <span className="text-neutral-600">（buffer 内容不变，只动光标）</span>
         )}
         {lineCountChanged && (

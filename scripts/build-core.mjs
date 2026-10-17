@@ -197,6 +197,112 @@ const SPEC = [
   { key: "<C-W>", pk: "A<C-W>", cat: "插入模式编辑", desc: "插入模式：删掉光标前的一个词" },
   { key: "<C-U>", pk: "A<C-U>", cat: "插入模式编辑", desc: "插入模式：删到行首（整行清空）" },
   { key: ">", pre: "Vj", cat: "缩进 / 大小写", desc: "可视模式：缩进选中的行，且**保持选中**（rhs 是 >gv）" },
+
+  // ============================================================ 补缺口（按 /coverage 页面）
+  //
+  // ⚠️ 这一批**不是凭印象列的** —— 是 `/coverage` 页面（分母 = Vim 官方
+  //    doc/index.txt）列出来的缺口，按高频程度挑的。
+  //
+  //    覆盖率 27% → 补完这一批后再看页面上的数字。
+
+  // ---- 基础移动：h / l 这两个最基本的键，之前居然完全没练 ----
+  { key: "h", cat: "光标移动", desc: "光标**左**移一格" },
+  { key: "l", cat: "光标移动", desc: "光标**右**移一格" },
+  { key: "<CR>", cat: "光标移动", desc: "光标移到**下一行行首**" },
+  { key: "-", cat: "光标移动", desc: "光标移到**上一行行首**" },
+  { key: "_", cat: "光标移动", desc: "光标移到当前行**第一个非空字符**（不吃计数时的 `^` 变体）" },
+  { key: "gj", cat: "光标移动", desc: "按**屏幕行**下移（'wrap' 打开时和 `j` 不同）" },
+  { key: "gk", cat: "光标移动", desc: "按**屏幕行**上移" },
+  { key: "g0", cat: "光标移动", desc: "跳到**屏幕行**行首" },
+  { key: "g$", cat: "光标移动", desc: "跳到**屏幕行**行尾" },
+  { key: "gE", cat: "光标移动", desc: "往前到上一个字串的**词尾**" },
+  { key: "gm", cat: "光标移动", desc: "跳到**屏幕行**中间" },
+  { key: "gM", cat: "光标移动", desc: "跳到**文本行**中间" },
+
+  // ---- 数字增减：改代码时最常用的一对 ----
+  { key: "<C-A>", cat: "数字增减", desc: "把光标处的数字 **+1**（改配置时天天用）" },
+  { key: "<C-X>", cat: "数字增减", desc: "把光标处的数字 **-1**" },
+
+  // ---- [ ] 跳转族 ----
+  { key: "[[", cat: "[] 跳转族", desc: "跳到**上一个函数/段落开头**（`{` 在行首）" },
+  { key: "]]", cat: "[] 跳转族", desc: "跳到**下一个函数/段落开头**" },
+  { key: "[]", cat: "[] 跳转族", desc: "跳到上一个函数**结尾**（`}` 在行首）" },
+  { key: "][", cat: "[] 跳转族", desc: "跳到下一个函数**结尾**" },
+  { key: "[(", cat: "[] 跳转族", desc: "跳到**外层未配对**的 `(`" },
+  { key: "])", cat: "[] 跳转族", desc: "跳到**下一个未配对**的 `)`" },
+  { key: "[{", cat: "[] 跳转族", desc: "跳到**外层未配对**的 `{`" },
+  { key: "]}", cat: "[] 跳转族", desc: "跳到**下一个未配对**的 `}`" },
+  { key: "[m", cat: "[] 跳转族", desc: "跳到上一个**方法边界**（C 风格 `/* */`）" },
+  { key: "]m", cat: "[] 跳转族", desc: "跳到下一个方法边界" },
+  { key: "[s", cat: "[] 跳转族", desc: "跳到上一个**拼错的词**（要 `:set spell`）" },
+  { key: "]s", cat: "[] 跳转族", desc: "跳到下一个拼错的词" },
+
+  // ---- 标记跳转（内置标记，之前只练了命名标记）----
+  { key: "`[", pre: "yy", cat: "标记跳转", desc: "跳到**上次修改**的开头" },
+  { key: "`]", pre: "yy", cat: "标记跳转", desc: "跳到**上次修改**的结尾" },
+  { key: "`{", cat: "标记跳转", desc: "跳到当前**段落**的开头" },
+  { key: "`}", cat: "标记跳转", desc: "跳到当前段落的结尾" },
+  { key: "''", pre: "G", cat: "标记跳转", desc: "跳回**上一次跳转**所在行（行首）" },
+  { key: "``", pre: "G", cat: "标记跳转", desc: "跳回上一次跳转的**精确位置**（行+列）" },
+
+  // ---- g 族（能独立教的那些）----
+  { key: "gv", pre: "viw", cat: "g 族", desc: "**重选**上次的可视区" },
+  { key: "gi", pre: "iX\x1bG", cat: "g 族", desc: "跳到**上次插入的位置**并进插入模式" },
+  { key: "gI", cat: "g 族", desc: "在**第 1 列**插入（不管缩进）" },
+  { key: "gd", cat: "g 族", desc: "跳到**局部定义**（只在函数内找）" },
+  { key: "gD", cat: "g 族", desc: "跳到**全局定义**" },
+  { key: "gf", cat: "g 族", desc: "打开光标下的**文件名**" },
+  { key: "gT", cat: "g 族", desc: "切到**上一个**标签页" },
+  { key: "gt", cat: "g 族", desc: "切到**下一个**标签页" },
+  { key: "g<Tab>", cat: "g 族", desc: "切到**上次访问**的标签页" },
+  { key: "g*", cat: "g 族", desc: "向下搜当前词，**不加词边界**（和 `*` 的区别）" },
+  { key: "g#", cat: "g 族", desc: "向上反向搜当前词，不加边界" },
+  { key: "g&", pre: ":s/aaa/ZZZ/\r", cat: "g 族", desc: "在**整个文件**重复上一次 `:s`" },
+  { key: "g?", pre: "g??", cat: "g 族", desc: "Rot13 编码整行（冷门但确实存在）" },
+
+  // ---- z 族：折叠 ----
+  { key: "za", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "**开关**当前折叠" },
+  { key: "zo", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "**展开**当前折叠" },
+  { key: "zc", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "**收起**当前折叠" },
+  { key: "zR", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "**展开全部**折叠" },
+  { key: "zM", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "**收起全部**折叠" },
+  { key: "zO", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "**递归展开**当前折叠" },
+  { key: "zC", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "**递归收起**当前折叠" },
+  { key: "zv", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "展开到**刚好能看见**光标行" },
+  { key: "zA", pre: ":set foldmethod=indent\r zM", cat: "z 族（折叠/滚动）", desc: "递归开关当前折叠" },
+  // ---- z 族：滚动（z<CR>/z./z- 是 zt/zz/zb 的按键等价）----
+  { key: "z<CR>", cat: "z 族（折叠/滚动）", desc: "把当前行滚到窗口**顶部**（等价 `zt`）" },
+  { key: "z.", cat: "z 族（折叠/滚动）", desc: "把当前行滚到窗口**中间**（等价 `zz`）" },
+  { key: "z-", cat: "z 族（折叠/滚动）", desc: "把当前行滚到窗口**底部**（等价 `zb`）" },
+  // ---- z 族：拼写 / 水平滚动 ----
+  { key: "z=", pre: ":set spell\r", cat: "z 族（折叠/滚动）", desc: "给拼错的词**建议列表**（要 `:set spell`）" },
+  { key: "zg", pre: ":set spell spellfile=/tmp/reflex-probe-spell-zg.add\r", cat: "z 族（折叠/滚动）", desc: "把词标记为**正确**（写进 spellfile）" },
+  { key: "zw", pre: ":set spell spellfile=/tmp/reflex-probe-spell-zw.add\r", cat: "z 族（折叠/滚动）", desc: "把词标记为**错误**" },
+  { key: "zug", pre: ":set spell spellfile=/tmp/reflex-probe-spell-zug.add\r", cat: "z 族（折叠/滚动）", desc: "**撤销** `zg`" },
+  { key: "zh", pre: ":set nowrap\r", cat: "z 族（折叠/滚动）", desc: "向左滚一列（要 `:set nowrap`）" },
+  { key: "zl", pre: ":set nowrap\r", cat: "z 族（折叠/滚动）", desc: "向右滚一列" },
+  { key: "zs", pre: ":set nowrap\r", cat: "z 族（折叠/滚动）", desc: "把光标**滚到屏幕最左**" },
+  { key: "ze", pre: ":set nowrap\r", cat: "z 族（折叠/滚动）", desc: "把光标**滚到屏幕最右**" },
+
+  // ---- 退出 / 命令行入口（日常最常用，之前完全没练）----
+  { key: "ZZ", cat: "退出 / 命令行", desc: "**保存并退出**（write + quit）" },
+  { key: "ZQ", cat: "退出 / 命令行", desc: "**不保存退出**（quit）" },
+  { key: "q:", cat: "退出 / 命令行", desc: "打开**命令行窗口**（历史命令可以像文本一样改）" },
+  { key: "q/", cat: "退出 / 命令行", desc: "打开**搜索历史**的命令行窗口" },
+  { key: "q?", cat: "退出 / 命令行", desc: "打开**反向搜索历史**的命令行窗口" },
+  { key: "K", cat: "退出 / 命令行", desc: "查光标下单词的**手册**（`K`，要 `:set keywordprg`）" },
+
+  // ---- 其他常用 ----
+  { key: "do", pre: ":diffthis\r", cat: "其他", desc: "`:diffget` —— 把差异**拿过来**（diff 模式下）" },
+  { key: "dp", pre: ":diffthis\r", cat: "其他", desc: "`:diffput` —— 把差异**推过去**" },
+  { key: "g8", cat: "其他", desc: "打印光标处字符的 **UTF-8 字节十六进制**" },
+  { key: "ga", cat: "其他", desc: "打印光标处字符的 **ASCII / Unicode 码点**" },
+  { key: "g<", pre: ":echo 'hello'\r", cat: "其他", desc: "显示**上一次命令的输出**" },
+  { key: "@:", pre: ":s/aaa/bbb/\r", cat: "其他", desc: "重复上一次的 **`:` 命令**" },
+  { key: "gQ", cat: "其他", desc: "切到 **Ex 模式**（`Q` 在现代 Vim 里的替代）" },
+  { key: "gR", pre: "RXY<Esc>", cat: "其他", desc: "进**虚拟替换模式**（替换时不破坏 tab）" },
+  { key: "gV", pre: "viw", cat: "其他", desc: "**不重选**上次可视区（和 `gv` 相反）" },
+  { key: "g^", cat: "其他", desc: "跳到屏幕行第一个非空字符" },
 ];
 
 /**
@@ -218,9 +324,6 @@ const SKIPPED = [
   { key: ";", pre: "t,", reason: "t, 之后重复的第二次实测，和 ; 同一个键" },
   { key: "==", pre: "", reason: "对照探针（那一行本来就缩进正确，所以无变化）—— 用 << 之后的那次" },
   { key: "q", reason: "「停止录制」是宏的一部分，单独出题没意义（@a / @@ 已覆盖宏的用法）" },
-  { key: "za", reason: "headless 下没有折叠可开 —— 实测无变化，**测不出效果就不出题**" },
-  { key: "zR", reason: "同上，headless 下测不出折叠行为" },
-  { key: "zM", reason: "同上，headless 下测不出折叠行为" },
   { key: "di[", reason: "标准文档里没有方括号 —— 样本不成立，测不出结果" },
   { key: "di<", reason: "标准文档里没有尖括号 —— 样本不成立" },
   { key: "diB", reason: "和 di{ 实测结果逐字相同，作为等价键展示" },
@@ -228,6 +331,8 @@ const SKIPPED = [
   { key: "gcc", reason: "注释是插件/Neovim 内建 comment，本机行为已由 /seq 的 gcc 覆盖" },
   { key: "gcgc", reason: "同上，和 gcc 等价" },
   { key: "gx", reason: "headless 下打不开系统程序 —— 测不出效果" },
+  { key: "[c", reason: "headless 下测不出：changelist 有记录但光标不跳（试了 4 种构造）" },
+  { key: "]c", reason: "同上" },
 ];
 
 // ------------------------------------------------------------- 生成
@@ -324,6 +429,17 @@ const items = SPEC.map((s) => {
       cursor: p.cursor,
       changed: p.changed,
       /**
+       * ⚠️⚠️ 「有效果」不一定体现在 buffer 文本上。
+       *
+       * 折叠（za / zM …）和标签页（gt / gT）改变的是**状态**，
+       * 文本和光标都不动。只记 `changed` 会让界面画不出 diff，
+       * 看起来像「这个键什么也没做」——而它其实生效了。
+       *
+       * 所以把「靠什么判定的」也记下来，界面据此说明。
+       */
+      foldChanged: p.foldChanged ?? false,
+      tabsChanged: p.tabsChanged ?? false,
+      /**
        * 按键**之前**的 buffer。
        *
        * ⚠️ 有前置操作时，这是**前置跑完**的状态，不是原始文档 ——
@@ -397,6 +513,10 @@ export type CoreMeasured = {
   before: string[];
   /** buffer 内容变了吗 */
   changed: boolean;
+  /** 折叠状态变了吗（za / zM 这类，文本不动但确实生效） */
+  foldChanged: boolean;
+  /** 标签页数变了吗（gt / gT / g<Tab>） */
+  tabsChanged: boolean;
   /** 可视选区（只有可视模式那几条有） */
   selection: { l1: number; c1: number; l2: number; c2: number } | null;
   /**

@@ -190,6 +190,41 @@ export function FlashLine({ flash, holding = false }: { flash: Flash | null; hol
   );
 }
 
+/**
+ * 题干里用 `**粗体**` 标重点 —— 这里把它渲染出来。
+ *
+ * ## ⚠️⚠️ 为什么需要
+ *
+ * 数据集的 `desc` 里**故意**用了 `**…**` 标关键处（`**开关**当前折叠`），
+ * 因为说明文字里最重要的往往是那个动词 —— 用户一眼该看到「开关」还是
+ * 「展开」。
+ *
+ * 但 React 默认把字符串原样渲染，于是页面上出现了**字面的星号**
+ * （截图看出来：「**开关**当前折叠」）。
+ *
+ * ⚠️ 不用 `dangerouslySetInnerHTML` —— 这些文字来自数据集，
+ * 但**永远不该**为了渲染粗体去开 HTML 注入的口子。
+ * 这里只做最朴素的 `**` 切分，切完按纯文本节点渲染。
+ */
+export function RichText({ children }: { children: string }) {
+  if (!children.includes("**")) return <>{children}</>;
+  const parts = children.split("**");
+  return (
+    <>
+      {parts.map((seg, i) =>
+        // 奇数段 = 被 ** 包住的
+        i % 2 === 1 ? (
+          <b key={i} className="text-neutral-100">
+            {seg}
+          </b>
+        ) : (
+          <span key={i}>{seg}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 /** 题目区的外框 —— 统一视觉 */
 export function TaskBox({ children }: { children: React.ReactNode }) {
   return (

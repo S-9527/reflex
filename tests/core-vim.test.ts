@@ -367,10 +367,22 @@ describe("内建操作数据集：诚实标注", () => {
    * 但必须在 CORE_SKIPPED 里列出来说明原因 —— 排掉不等于藏起来。
    */
   it("headless 下测不出效果的都排掉了，并给了原因", () => {
+    /**
+     * ⚠️⚠️ 这条**曾经**断言 `za` / `zR` / `zM` 在排除名单里 ——
+     *    因为当时记的理由是「headless 下没有折叠可开，实测无变化」。
+     *
+     * 后来发现那是**探针设置的问题**，不是 Vim 的行为：
+     *
+     * ```
+     * :set foldmethod=indent   ← 没这个，indent 折叠根本不存在
+     * zM                       ← 不先收起，za 就没什么可展开
+     * ```
+     *
+     * 补上这两步后 `za` / `zR` / `zO` 都测出了 foldChanged=true，
+     * 已经正常出题。现在真正测不出的只剩 `gx`。
+     */
     const skipped = new Set(CORE_SKIPPED.map((s) => s.key));
-    for (const k of ["za", "zR", "zM", "gx"]) {
-      expect(skipped.has(k), `${k} 测不出效果却没在 CORE_SKIPPED 里说明`).toBe(true);
-    }
+    expect(skipped.has("gx"), "gx 测不出效果却没在 CORE_SKIPPED 里说明").toBe(true);
     for (const s of CORE_SKIPPED) {
       expect(s.reason.trim(), `${s.key} 排掉了但没写原因`).toBeTruthy();
     }
@@ -378,14 +390,16 @@ describe("内建操作数据集：诚实标注", () => {
 
   it("被排掉的键不在题库里（排干净了）", () => {
     const inPool = new Set(CORE_ITEMS.map((i) => i.key));
-    for (const s of CORE_SKIPPED) {
-      // 同一个键可能既出题又被排（比如 u 有两次实测）—— 只警告完全没出题的
-      if (inPool.has(s.key)) continue;
-      expect(true).toBe(true);
-    }
-    // 折叠那几个必须真的不在题库里
-    for (const k of ["za", "zR", "zM", "gx"]) {
-      expect(inPool.has(k), `${k} 测不出效果却出题了`).toBe(false);
+    /**
+     * ⚠️ 折叠（za / zR / zO）现在**能测出效果**了 —— 探针补了
+     * `:set foldmethod=indent` + `zM` 两步之后就有折叠可开关。
+     * 所以它们已经正常出题，不在排除名单里。
+     *
+     * 真正测不出的只剩 `gx`（headless 打不开系统程序）。
+     */
+    expect(inPool.has("gx"), "gx 测不出效果却出题了").toBe(false);
+    for (const k of ["za", "zR", "zO"]) {
+      expect(inPool.has(k), `${k} 应该出题（折叠现在能测）`).toBe(true);
     }
   });
 });

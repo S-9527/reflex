@@ -198,6 +198,7 @@ end
 --- 看着像「这个键什么也不做」，其实是**对比基准错了**。
 local function record(key, line, col, before, note, category, opts)
   opts = opts or {}
+  -- ⚠️ pre / typed 由调用方传进来，缺省是空
   local lines, ln, cl = snapshot()
   local entry = {
     key = key,
@@ -225,7 +226,17 @@ end
 local function probe(key, line, col, note, category, opts)
   opts = opts or {}
   setup(line, col, opts.ft)
-  local before = vim.deepcopy(SRC)
+  -- ⚠️⚠️ `probe()` **必须也支持 `pre`** —— 之前它忽略了 opts.pre。
+  --
+  -- 后果：我给 `gv` 传了 `{ pre = "viw" }`（要先选一次才能重选），
+  -- 而 pre 被静默丢掉，于是 `gv` 什么都没选 → 实测记成「无变化」。
+  -- 这类「探针参数被忽略」比探针本身失效更隐蔽 ——
+  -- 结果看着像「这个键没效果」。
+  if opts.pre and opts.pre ~= "" then feed(opts.pre) end
+  local before = vim.deepcopy(vim.api.nvim_buf_get_lines(0, 0, -1, false))
+  local beforeFold = vim.fn.foldclosed(line)
+  local beforeTabs = #vim.api.nvim_list_tabpages()
+  local beforeSearch = vim.fn.getreg("/")
   feed(key)
   -- 可视模式：再按一次 <Esc> 把选区落到 '< / '>
   local sel = nil
@@ -237,7 +248,15 @@ local function probe(key, line, col, note, category, opts)
     ft = opts.ft,
     visual = opts.visual,
     selection = sel,
+    -- ⚠️ pre 必须记进数据，否则「gv 要先选一次」这条证据链断了
+    pre = opts.pre or "",
+    typed = opts.typed or false,
   })
+  local rec = out[#out]
+  -- ⚠️ 折叠 / 标签页 / 搜索寄存器 的变化也算「有效果」
+  if vim.fn.foldclosed(line) ~= beforeFold then rec.changed = true; rec.foldChanged = true end
+  if #vim.api.nvim_list_tabpages() ~= beforeTabs then rec.changed = true; rec.tabsChanged = true end
+  if vim.fn.getreg("/") ~= beforeSearch then rec.searchChanged = true end
 end
 
 --- 先做一次前置操作，再测 keys。
@@ -478,9 +497,18 @@ local function probeDoc(key, doc, line, col, note, category, opts)
   pcall(vim.cmd, "packadd matchit")
   local send = opts.typed and feedTyped or feed
   if opts.pre and opts.pre ~= "" then send(opts.pre) end
+  -- ⚠️⚠️ 除了 buffer 文本和光标，还要记**折叠状态**和**标签页数**。
+  --
+  -- 实测踩到：`za` / `zM` / `gt` 这些键**确实生效了**，
+  -- 但它们改的是折叠加固状态 / 当前标签页，buffer 文本和光标都不动 ——
+  -- 只按「文本变了没」判断，会把它们全记成「无变化」。
   local beforeKey = vim.deepcopy(vim.api.nvim_buf_get_lines(0, 0, -1, false))
+  local beforeFold = vim.fn.foldclosed(line)
+  local beforeTabs = #vim.api.nvim_list_tabpages()
   send(key)
   local lines, ln, cl = snapshot()
+  local afterFold = vim.fn.foldclosed(line)
+  local afterTabs = #vim.api.nvim_list_tabpages()
   out[#out + 1] = {
     key = key,
     line = line,
@@ -497,7 +525,16 @@ local function probeDoc(key, doc, line, col, note, category, opts)
     typed = opts.typed or false,
     -- ⚠️ 记下这一条用的是自定义文档 —— 界面画 diff 时要拿它当「之前」
     doc = doc,
+    -- ⚠️⚠️ 折叠 / 标签页状态变化也要算「有效果」。
+    --
+    -- `za` / `zM` / `gt` 这些键**确实生效**，但 buffer 文本和光标都不动 ——
+    -- 只按「文本变了没」判断会把它们全记成「无变化」，
+    -- 于是界面上看起来「这个键什么也没做」。
+    foldChanged = beforeFold ~= afterFold,
+    tabsChanged = beforeTabs ~= afterTabs,
   }
+  local last = out[#out]
+  if last.foldChanged or last.tabsChanged then last.changed = true end
 end
 
 -- 括号配对文档：`%` 在 `(` 上跳到 `)`，`g%` 反向，`[%` / `]%` 跳到外层括号
@@ -552,6 +589,247 @@ probeDoc("A<C-U>", { "hello world foo" }, 1, 1, "插入模式：删到行首，�
 
 -- 可视模式下的 `>`：缩进选区，且**保持选中**（rhs 是 `>gv`）
 probeDoc(">", { "function f(x)", "  body", "end" }, 1, 1, "可视模式：把选中的行缩进，并保持选中", "缩进 / 大小写", { pre = "Vj" })
+
+--- 测「会退出窗口」的键（ZZ / ZQ / :q 这类）。
+---
+--- ## ⚠️⚠️ 为什么不能直接用 `probe`
+---
+--- `ZZ` 会**真的退出当前窗口** —— headless 下窗口关掉之后，
+--- 后面所有探针都会静默跳过（实测：脚本从「141 条」变成只跑前面几条）。
+---
+--- 所以这里用一个**临时新窗口**来试：在独立窗口里按 ZZ，
+--- 观察它有没有触发退出（窗口数 -1）+ 有没有写入。
+--- 主窗口和主流程完全不受影响。
+local function probeExit(key, note, category)
+  -- 先记下主窗口
+  local main = vim.api.nvim_get_current_win()
+  -- 开一个临时窗口（它是可关的）
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "exittest" })
+  vim.cmd("split")
+  vim.api.nvim_win_set_buf(0, buf)
+  local temp = vim.api.nvim_get_current_win()
+  local before = #vim.api.nvim_tabpage_list_wins(0)
+  -- 这个键会尝试退出。`:normal!` 在最后一个窗口时会报 E37，包在 pcall 里
+  pcall(vim.api.nvim_exec2, "normal! " .. vim.api.nvim_replace_termcodes(key, true, false, true), {})
+  local after = #vim.api.nvim_tabpage_list_wins(0)
+  -- 回主窗口
+  if vim.api.nvim_win_is_valid(main) then pcall(vim.api.nvim_set_current_win, main) end
+  out[#out + 1] = {
+    key = key,
+    line = 1, col = 1,
+    result = { "exittest" },
+    cursor = { 1, 1 },
+    before = { "exittest" },
+    changed = false,
+    note = note .. ("（实测：窗口数 %d → %d，%s）"):format(before, after, after < before and "**确实退出了**" or "没退出"),
+    category = category,
+    pre = "",
+    ft = nil,
+    typed = true,
+    -- ⚠️ 这一类没有 buffer diff 证据，界面要如实标注
+    exitProbe = true,
+  }
+end
+
+-- ---------------------------------------------------------------- 14. 补缺口：基础移动 / [ ] / g / z / 标记
+--
+-- ## ⚠️ 这一节的来源
+--
+-- `/coverage` 页面（分母是 Vim 官方 `doc/index.txt`）列出了全部缺口。
+-- 这一节按那张表补 —— **不是凭印象列清单**，而是照着官方的命令表逐条核。
+--
+-- 挑的都是**高频**的（`h` `l` 左右移一格、`[[` `]]` 段跳、`gv` 重选 …），
+-- 冷门的（Rot13 / 拼写 / Select mode）不收，理由写在页面的「已排除」里。
+
+-- ---- 基础移动：h / l（最基本的两个键，之前居然完全没练）----
+probe("h", 1, 7, "光标左移一格", "光标移动")
+probe("l", 1, 1, "光标右移一格", "光标移动")
+probe("<CR>", 1, 1, "光标移到下一行行首", "光标移动")
+probe("-", 5, 1, "光标移到上一行行首", "光标移动")
+probe("_", 5, 6, "光标移到当前行第一个非空字符", "光标移动")
+probe("gj", 1, 1, "按**屏幕行**下移（'wrap' 打开时和 j 不同）", "光标移动")
+probe("gk", 5, 1, "按**屏幕行**上移", "光标移动")
+probe("g0", 1, 7, "按屏幕行跳到行首", "光标移动")
+probe("g$", 1, 1, "按屏幕行跳到行尾", "光标移动")
+probe("gE", 1, 10, "往前到上一个字串的**词尾**", "光标移动")
+probe("gm", 1, 1, "跳到屏幕行中间", "光标移动")
+probe("gM", 1, 1, "跳到文本行中间", "光标移动")
+
+-- ---- 计数入门的两个方向键：<C-A> / <C-X>（数字增减）----
+probeDoc("<C-A>", { "count = 41" }, 1, 11, "把光标处（或之后）的数字 **+1**", "数字增减", { typed = true })
+probeDoc("<C-X>", { "count = 41" }, 1, 11, "把光标处的数字 **-1**", "数字增减", { typed = true })
+
+-- ---- [ ] 跳转族（跳转/改点/括号/段落）----
+-- ⚠️ 这些键在标准 SRC 上没有对应的语法结构，要用自定义文档：
+--    段落跳要有空行、括号跳要有括号、改点跳要有多次修改记录。
+local BRACKET_DOC = {
+  "local function outer()",
+  "  local a = 1",
+  "  local b = 2",
+  "end",
+  "",
+  "local function outer2()",
+  "  return a + b",
+  "end",
+  "",
+  "local tail = 0",
+}
+probeDoc("[[", BRACKET_DOC, 7, 3, "跳到**上一个函数开头**（`{` 在行首）", "[] 跳转族")
+probeDoc("]]", BRACKET_DOC, 3, 3, "跳到**下一个函数开头**", "[] 跳转族")
+probeDoc("[]", BRACKET_DOC, 3, 3, "跳到上一个函数**结尾**（`}` 在行首）", "[] 跳转族")
+probeDoc("][", BRACKET_DOC, 3, 3, "跳到下一个函数**结尾**", "[] 跳转族")
+-- ⚠️ `[(]` `])` `[{]` `]}` 跳到的是**未配对**的括号 ——
+--    所以文档里必须真的有未配对的括号。BRACKET_DOC 是配平的 lua，
+--    拿它测这几条会得到「无变化」（实测踩到）。
+local UNBALANCED = {
+  "function f(a, b)",
+  "  return (a + b",
+  "end",
+  "",
+  "local t = {",
+  "  1,",
+}
+probeDoc("[(", UNBALANCED, 3, 1, "跳到**外层未配对**的 `(` —— 往上找", "[] 跳转族")
+probeDoc("])", UNBALANCED, 2, 11, "跳到**下一个未配对**的 `)` —— 往下找", "[] 跳转族")
+probeDoc("[{", UNBALANCED, 6, 3, "跳到**外层未配对**的 `{`", "[] 跳转族")
+probeDoc("]}", UNBALANCED, 5, 13, "跳到**下一个未配对**的 `}`", "[] 跳转族")
+-- ⚠️ `[m` / `]m` 是 **C 风格**的「方法开始/结束」（匹配 `/*` `*/` 那种），
+--    lua 里没有这个概念 —— 用 C 文档才测得出来。
+local CDOC = {
+  "int main(void) {",
+  "  /* start */",
+  "  return 0;",
+  "  /* end */",
+  "}",
+}
+probeDoc("[m", CDOC, 4, 3, "跳到上一个**方法/函数边界**（C 风格 `/* */`）", "[] 跳转族", { ft = "c" })
+probeDoc("]m", CDOC, 2, 3, "跳到下一个方法/函数边界", "[] 跳转族", { ft = "c" })
+-- ⚠️⚠️ `[c` / `]c` **在 headless 下测不出效果** —— 实测不跳。
+--
+-- 试过四种构造方式，`getchangelist()` 都确认有 2~3 条记录，但光标不动：
+--
+--   1. `:normal!` 造 change（`xx` / `A x<Esc>`）
+--   2. `feedkeys(..., "tx")` 真按键造 change
+--   3. 真的 `ciw` 改词（changelist 里 lnum=1 和 lnum=5）
+--   4. 真的 `dd` 删行
+--
+-- 每种都是「changelist 有记录、`]c` 从任意行开始都不动」。
+-- 说明它依赖的某种交互状态 headless 下不存在。
+--
+-- **测不出来就说测不出来** —— 这两条不出题，在 CORE_SKIPPED 里说明原因。
+probeAfter("[c", 5, 5, "", "跳到上一个修改点（**headless 下测不出**，见 CORE_SKIPPED）", "[] 跳转族")
+probeAfter("]c", 1, 1, "", "跳到下一个修改点（**headless 下测不出**）", "[] 跳转族")
+probeDoc("[s", { "local mispelled = 1" }, 1, 7, "跳到上一个拼错的词（需要 :set spell）", "[] 跳转族")
+probeDoc("]s", { "local mispelled = 1" }, 1, 1, "跳到下一个拼错的词", "[] 跳转族")
+
+-- ---- 标记跳转（` 系列：精确位置 vs 行首）----
+-- ⚠️ `'a` / `` `a `` 已经在第 9 节测过，这里补的是**内置标记**：
+--    上次可视区、上次修改、段落边界。
+probeDoc("`[", { "aaa", "bbb", "ccc" }, 2, 1, "跳到**上次修改**的开头（要先用 y/d 制造一次）", "标记跳转", { pre = "yy" })
+probeDoc("`]", { "aaa", "bbb", "ccc" }, 2, 1, "跳到上次修改的结尾", "标记跳转", { pre = "yy" })
+probeDoc("`{", { "aaa", "", "bbb" }, 3, 1, "跳到当前段落的开头", "标记跳转")
+probeDoc("`}", { "aaa", "", "bbb" }, 1, 1, "跳到当前段落的结尾", "标记跳转")
+probeDoc("''", { "aaa", "bbb", "ccc" }, 1, 1, "跳回**上一次跳转**所在行（行首）", "标记跳转", { pre = "G" })
+probeDoc("``", { "aaa", "bbb", "ccc" }, 1, 1, "跳回上一次跳转的**精确位置**", "标记跳转", { pre = "G" })
+
+-- ---- g 族（能独立教的那些）----
+probe("gv", 1, 1, "**重选**上次的可视区（先 `viw` 选一次，再 `gv` 重选）", "g 族", { pre = "viw", visual = true })
+-- ⚠️ `gi` 依赖 `'^` mark（上次插入位置）。标准 SRC 上 `iX` 之后
+--    mark 确实有了，但光标本来就在同一位置 → 看不出移动。
+--    所以先跳到别处，再 `gi` 回插入点。
+probe("gi", 1, 3, "跳到**上次插入的位置**（'^ mark）并进插入模式", "g 族", { pre = "iX\27G" })
+probe("gI", 1, 3, "在**第 1 列**插入（不管缩进）", "g 族")
+probe("gd", 1, 4, "跳到**局部定义**（和 gD 的区别：只在函数内找）", "g 族")
+probe("gD", 1, 4, "跳到**全局定义**", "g 族")
+probe("gf", 1, 1, "打开光标下的**文件名**（要文档里真有这个文件名）", "g 族")
+probe("gT", 1, 1, "切到**上一个**标签页", "g 族")
+probe("gt", 1, 1, "切到**下一个**标签页", "g 族")
+probe("g<Tab>", 1, 1, "切到**上次访问**的标签页", "g 族")
+-- ⚠️ 要用**有多个候选词**的文档，否则 `g*` 找不到下一个匹配，
+--    光标不动 → 实测记成「无变化」（踩过）。
+local SEARCH_DOC = { "local total = 1", "total = 2", "print(total)" }
+probeDoc("g*", SEARCH_DOC, 1, 7, "向下搜当前词，**不加词边界**（和 * 的区别就在这里）", "g 族")
+probeDoc("g#", SEARCH_DOC, 1, 7, "向上反向搜当前词，不加边界", "g 族")
+probeDoc("g&", { "aaa bbb", "aaa ccc" }, 1, 1, "在**整个文件**每一行重复上一次 :s（不带 flag）", "g 族", { pre = ":s/aaa/ZZZ/\r" })
+probe("g?", 1, 1, "Rot13 编码整行（冷门，但确实能测出来）", "g 族", { pre = "g??" })
+
+-- ---- z 族（折叠 + 滚动 + 拼写）----
+-- ⚠️ 标准 SRC 没有折叠结构，要用带函数体的文档 + foldmethod。
+probeDoc("za", BRACKET_DOC, 3, 3, "**开关**当前折叠（有则展开，无则收起）", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zo", BRACKET_DOC, 3, 3, "**展开**当前折叠", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zc", BRACKET_DOC, 3, 3, "**收起**当前折叠", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zR", BRACKET_DOC, 3, 3, "**展开全部**折叠", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zM", BRACKET_DOC, 3, 3, "**收起全部**折叠", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zO", BRACKET_DOC, 3, 3, "**递归展开**当前折叠", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zC", BRACKET_DOC, 3, 3, "**递归收起**当前折叠", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zv", BRACKET_DOC, 3, 3, "展开到**刚好能看见**光标行", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+probeDoc("zA", BRACKET_DOC, 3, 3, "递归开关当前折叠", "z 族（折叠/滚动）", { ft = "lua", pre = ":set foldmethod=indent\r zM" })
+-- 滚动：z<CR> / z. / z- 是 zt / zz / zb 的**按键等价**（已有），但官方名字不同
+probe("z<CR>", 5, 1, "把当前行滚到窗口**顶部**（等价 zt，rhs 是 `zt<C-E>` 那种）", "z 族（折叠/滚动）")
+probe("z.", 5, 1, "把当前行滚到窗口**中间**（等价 zz）", "z 族（折叠/滚动）")
+probe("z-", 5, 1, "把当前行滚到窗口**底部**（等价 zb）", "z 族（折叠/滚动）")
+-- 拼写
+probeDoc("z=", { "mispelled wrod" }, 1, 1, "给光标下的拼错词**建议列表**（需要 :set spell）", "z 族（折叠/滚动）", { pre = ":set spell\r" })
+-- ⚠️⚠️ zg / zw / zug **会写文件** —— 而且写的是**用户真实的 spellfile**！
+--
+-- 实测踩到：跑完探针后 `~/.config/nvim/spell/en.utf-8.add` 里多了
+-- `#ispelled` / `#ello/!` 这种**被写坏的内容**（`#` 是 zw 的错误标记，
+-- `/!` 是 zg 的正确标记，同一个词被两种标记撕开了）。
+--
+-- 探针是**只读旁路**，绝不能改用户的配置。所以：
+--   1. 把 spellfile 指到一个**临时目录**（`set spellfile=`）
+--   2. 跑完不清理那个临时文件也没关系（在 /tmp 下）
+-- ⚠️⚠️ spellfile 必须用**固定路径**，不能用 `tempname()`。
+--
+-- 我第一版用 `tempname()`，于是每次跑的 `pre` 都不同
+-- （`:set spell spellfile=/tmp/nvim.xxx/199.add`），
+-- 生成器按 (键, 前置) 匹配时**彻底对不上**，而且 data/probe-core.json
+-- 每跑一次就变一次 —— 证据链不可复现。
+--
+-- 固定到一个**专门的临时文件**：写在 /tmp 下、不碰用户配置、
+-- 每次跑都覆盖同一个路径，于是 `pre` 字符串是稳定的。
+local function probeDocWithSpell(key, doc, line, col, note, category)
+  -- ⚠️ 每个键用**不同**的文件名 —— 否则三条探针的 `pre` 完全相同，
+  --    生成器按 (键, 前置) 匹配时会报歧义（zg/zw/zug 的键不同，其实不冲突，
+  --    但文件名分开更清楚：将来加同名键也不会撞）。
+  local spellfile = "/tmp/reflex-probe-spell-" .. key:gsub("%W", "") .. ".add"
+  probeDoc(key, doc, line, col, note, category, {
+    pre = ":set spell spellfile=" .. spellfile .. "\r",
+  })
+end
+probeDocWithSpell("zg", { "mispelled" }, 1, 1, "把词**标记为正确**（写进 **spellfile**，不是改文本）", "z 族（折叠/滚动）")
+probeDocWithSpell("zw", { "hello" }, 1, 1, "把词标记为**错误**（写进 spellfile）", "z 族（折叠/滚动）")
+probeDocWithSpell("zug", { "mispelled" }, 1, 1, "**撤销** zg（把词从正确表里删掉）", "z 族（折叠/滚动）")
+-- 水平滚动（'wrap' 关掉时才有意义）
+probeDoc("zh", { "abcdefghijklmnopqrstuvwxyz0123456789" }, 1, 1, "向左滚一列（需要 :set nowrap）", "z 族（折叠/滚动）", { pre = ":set nowrap\r" })
+probeDoc("zl", { "abcdefghijklmnopqrstuvwxyz0123456789" }, 1, 1, "向右滚一列（需要 :set nowrap）", "z 族（折叠/滚动）", { pre = ":set nowrap\r" })
+probeDoc("zs", { "abcdefghijklmnopqrstuvwxyz0123456789" }, 1, 20, "把光标**滚到屏幕最左**", "z 族（折叠/滚动）", { pre = ":set nowrap\r" })
+probeDoc("ze", { "abcdefghijklmnopqrstuvwxyz0123456789" }, 1, 1, "把光标**滚到屏幕最右**", "z 族（折叠/滚动）", { pre = ":set nowrap\r" })
+
+-- ---- 退出 / 命令行入口（日常最常用，之前完全没练）----
+-- ⚠️⚠️ ZZ / ZQ **会退出当前窗口** —— 在 headless 探针里会把整个脚本带崩
+--    （实测：后面所有探针都跳过不跑了）。
+--    所以**不在 probe 里测**，改用 `:normal!` 单独跑一次并捕获退出意图。
+--    见下面 `probeExit()`。
+probeExit("ZZ", "**保存并退出**（write + quit）—— 不直接按，用 :normal! 探测退出意图", "退出 / 命令行")
+probeExit("ZQ", "**不保存退出**（quit）", "退出 / 命令行")
+probeDoc("q:", { "hello" }, 1, 1, "打开**命令行窗口**（可以像编辑文本一样改历史命令）", "退出 / 命令行")
+probeDoc("q/", { "hello" }, 1, 1, "打开**搜索历史**的命令行窗口", "退出 / 命令行")
+probeDoc("q?", { "hello" }, 1, 1, "打开**反向搜索历史**的命令行窗口", "退出 / 命令行")
+probeDoc("K", { "printf" }, 1, 1, "查光标下单词的**手册**（需要 :set keywordprg）", "退出 / 命令行")
+
+-- ---- 其他常用（之前漏了的）----
+probeDoc("do", { "aaa", "bbb" }, 1, 1, "**:diffget** —— 把另一个窗口的差异拿过来（需要 diff 模式）", "其他", { pre = ":diffthis\r" })
+probeDoc("dp", { "aaa", "bbb" }, 1, 1, "**:diffput** —— 把自己的差异推过去", "其他", { pre = ":diffthis\r" })
+probeDoc("g8", { "中" }, 1, 1, "打印光标处字符的 **UTF-8 字节十六进制**", "其他")
+probeDoc("ga", { "A" }, 1, 1, "打印光标处字符的 **ASCII / Unicode 码点**", "其他")
+probeDoc("g<", { "aaa" }, 1, 1, "显示**上一次命令的输出**", "其他", { pre = ":echo 'hello'\r" })
+probeDoc("@:", { "aaa" }, 1, 1, "重复上一次的 **: 命令**", "其他", { pre = ":s/aaa/bbb/\r" })
+probeDoc("gQ", { "aaa" }, 1, 1, "切到 **Ex 模式**（Q 的现代替代）", "其他")
+probeDoc("gR", { "abcdef" }, 1, 1, "进**虚拟替换模式**（不破坏 tab 的替换）", "其他", { pre = "RXY<Esc>" })
+probeDoc("gV", { "aaa" }, 1, 1, "**不重选**上次可视区（和 gv 相反）", "其他", { pre = "viw" })
+probeDoc("g^", { "    abc" }, 1, 1, "跳到屏幕行第一个非空字符", "其他")
 
 -- ---------------------------------------------------------------- 输出
 local path = vim.fn.expand("~/workspace/reflex/data/probe-core.json")

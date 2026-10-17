@@ -53,6 +53,10 @@ export type CoreMeasured = {
   before: string[];
   /** buffer 内容变了吗 */
   changed: boolean;
+  /** 折叠状态变了吗（za / zM 这类，文本不动但确实生效） */
+  foldChanged: boolean;
+  /** 标签页数变了吗（gt / gT / g<Tab>） */
+  tabsChanged: boolean;
   /** 可视选区（只有可视模式那几条有） */
   selection: { l1: number; c1: number; l2: number; c2: number } | null;
   /**
@@ -125,6 +129,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "ocal Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -168,6 +174,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -211,6 +219,8 @@ export const CORE_ITEMS: CoreItem[] = [
         6
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "ocal Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -254,6 +264,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "cal Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -296,6 +308,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -339,6 +353,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -384,6 +400,8 @@ export const CORE_ITEMS: CoreItem[] = [
         6
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -427,6 +445,8 @@ export const CORE_ITEMS: CoreItem[] = [
         6
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -470,6 +490,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -513,6 +535,8 @@ export const CORE_ITEMS: CoreItem[] = [
         6
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -556,6 +580,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -599,6 +625,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -642,6 +670,8 @@ export const CORE_ITEMS: CoreItem[] = [
         3
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -685,6 +715,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -728,6 +760,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -771,6 +805,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -814,6 +850,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -857,6 +895,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -900,6 +940,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -943,6 +985,8 @@ export const CORE_ITEMS: CoreItem[] = [
         7
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -986,6 +1030,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1030,6 +1076,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1074,6 +1122,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1117,6 +1167,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1160,6 +1212,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1204,6 +1258,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1246,6 +1302,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1289,6 +1347,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1332,6 +1392,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1375,6 +1437,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1418,6 +1482,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "ocal Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1461,6 +1527,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "ocal Total = compute(a, b) + 1, tail",
         "ocal name = \"hello world\"",
@@ -1504,6 +1572,8 @@ export const CORE_ITEMS: CoreItem[] = [
         3
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1547,6 +1617,8 @@ export const CORE_ITEMS: CoreItem[] = [
         4
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1590,6 +1662,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1633,6 +1707,8 @@ export const CORE_ITEMS: CoreItem[] = [
         38
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1677,6 +1753,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1721,6 +1799,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1764,6 +1844,8 @@ export const CORE_ITEMS: CoreItem[] = [
         2
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1807,6 +1889,8 @@ export const CORE_ITEMS: CoreItem[] = [
         3
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1820,10 +1904,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "c1": 1,
         "l2": 1,
         "c2": 3,
-        "l1": 1
+        "l1": 1,
+        "c1": 1
       },
       "doc": null
     }
@@ -1855,6 +1939,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1868,10 +1954,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "c1": 1,
         "l2": 1,
         "c2": 2147483647,
-        "l1": 1
+        "l1": 1,
+        "c1": 1
       },
       "doc": null
     }
@@ -1903,6 +1989,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1916,10 +2004,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "c1": 1,
         "l2": 1,
         "c2": 1,
-        "l1": 1
+        "l1": 1,
+        "c1": 1
       },
       "doc": null
     }
@@ -1951,6 +2039,8 @@ export const CORE_ITEMS: CoreItem[] = [
         5
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -1964,10 +2054,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "c1": 1,
         "l2": 1,
         "c2": 5,
-        "l1": 1
+        "l1": 1,
+        "c1": 1
       },
       "doc": null
     }
@@ -1999,6 +2089,8 @@ export const CORE_ITEMS: CoreItem[] = [
         37
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2012,10 +2104,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "c1": 1,
         "l2": 1,
         "c2": 38,
-        "l1": 1
+        "l1": 1,
+        "c1": 1
       },
       "doc": null
     }
@@ -2047,6 +2139,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2060,10 +2154,10 @@ export const CORE_ITEMS: CoreItem[] = [
         "third line here"
       ],
       "selection": {
-        "c1": 1,
         "l2": 10,
         "c2": 2147483647,
-        "l1": 1
+        "l1": 1,
+        "c1": 1
       },
       "doc": null
     }
@@ -2095,6 +2189,8 @@ export const CORE_ITEMS: CoreItem[] = [
         7
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2138,6 +2234,8 @@ export const CORE_ITEMS: CoreItem[] = [
         7
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2181,6 +2279,8 @@ export const CORE_ITEMS: CoreItem[] = [
         5
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2224,6 +2324,8 @@ export const CORE_ITEMS: CoreItem[] = [
         7
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2267,6 +2369,8 @@ export const CORE_ITEMS: CoreItem[] = [
         7
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2310,6 +2414,8 @@ export const CORE_ITEMS: CoreItem[] = [
         5
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2353,6 +2459,8 @@ export const CORE_ITEMS: CoreItem[] = [
         5
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2396,6 +2504,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2439,6 +2549,8 @@ export const CORE_ITEMS: CoreItem[] = [
         3
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2482,6 +2594,8 @@ export const CORE_ITEMS: CoreItem[] = [
         37
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2525,6 +2639,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2568,6 +2684,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2611,6 +2729,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2654,6 +2774,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2697,6 +2819,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2740,6 +2864,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2783,6 +2909,8 @@ export const CORE_ITEMS: CoreItem[] = [
         22
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2826,6 +2954,8 @@ export const CORE_ITEMS: CoreItem[] = [
         21
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2869,6 +2999,8 @@ export const CORE_ITEMS: CoreItem[] = [
         22
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2912,6 +3044,8 @@ export const CORE_ITEMS: CoreItem[] = [
         23
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2955,6 +3089,8 @@ export const CORE_ITEMS: CoreItem[] = [
         32
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -2998,6 +3134,8 @@ export const CORE_ITEMS: CoreItem[] = [
         32
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3041,6 +3179,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3084,6 +3224,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3127,6 +3269,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3170,6 +3314,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3213,6 +3359,8 @@ export const CORE_ITEMS: CoreItem[] = [
         2
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3256,6 +3404,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3299,6 +3449,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3342,6 +3494,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3385,6 +3539,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3427,6 +3583,8 @@ export const CORE_ITEMS: CoreItem[] = [
         38
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3469,6 +3627,8 @@ export const CORE_ITEMS: CoreItem[] = [
         38
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3512,6 +3672,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3555,6 +3717,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3598,6 +3762,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3641,6 +3807,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3684,6 +3852,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3727,6 +3897,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3770,6 +3942,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3813,6 +3987,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3856,6 +4032,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3899,6 +4077,8 @@ export const CORE_ITEMS: CoreItem[] = [
         23
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3942,6 +4122,8 @@ export const CORE_ITEMS: CoreItem[] = [
         22
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -3987,6 +4169,8 @@ export const CORE_ITEMS: CoreItem[] = [
         11
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4030,6 +4214,8 @@ export const CORE_ITEMS: CoreItem[] = [
         9
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4073,6 +4259,8 @@ export const CORE_ITEMS: CoreItem[] = [
         15
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4116,6 +4304,8 @@ export const CORE_ITEMS: CoreItem[] = [
         12
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4159,6 +4349,8 @@ export const CORE_ITEMS: CoreItem[] = [
         19
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4202,6 +4394,8 @@ export const CORE_ITEMS: CoreItem[] = [
         18
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4243,6 +4437,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4286,6 +4482,8 @@ export const CORE_ITEMS: CoreItem[] = [
         3
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4329,6 +4527,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4372,6 +4572,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4415,6 +4617,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4458,6 +4662,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4501,6 +4707,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "cal Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4544,6 +4752,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "cal Total = compute(a, b) + 1, tail",
         "local name = \"hello world\"",
@@ -4579,6 +4789,8 @@ export const CORE_ITEMS: CoreItem[] = [
         22
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local x = f({ a = 1 })",
         "end"
@@ -4609,6 +4821,8 @@ export const CORE_ITEMS: CoreItem[] = [
         21
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local x = f({ a = 1 })",
         "end"
@@ -4639,6 +4853,8 @@ export const CORE_ITEMS: CoreItem[] = [
         12
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local x = f({ a = 1 })",
         "end"
@@ -4669,6 +4885,8 @@ export const CORE_ITEMS: CoreItem[] = [
         12
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local x = f({ a = 1 })",
         "end"
@@ -4699,6 +4917,8 @@ export const CORE_ITEMS: CoreItem[] = [
         21
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local x = f({ a = 1 })",
         "end"
@@ -4729,6 +4949,8 @@ export const CORE_ITEMS: CoreItem[] = [
         14
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local x = f({ a = 1 })",
         "end"
@@ -4760,6 +4982,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local total = 1",
         "total = 2",
@@ -4793,6 +5017,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "local total = 1",
         "total = 2",
@@ -4825,6 +5051,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "ZZZ bbb aaa",
         "aaa ccc"
@@ -4854,6 +5082,8 @@ export const CORE_ITEMS: CoreItem[] = [
         12
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "hello world foo"
       ],
@@ -4881,6 +5111,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "hello world foo"
       ],
@@ -4910,6 +5142,8 @@ export const CORE_ITEMS: CoreItem[] = [
         1
       ],
       "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
       "before": [
         "function f(x)",
         "  body",
@@ -4920,6 +5154,3540 @@ export const CORE_ITEMS: CoreItem[] = [
         "function f(x)",
         "  body",
         "end"
+      ]
+    }
+  },
+  {
+    "key": "h",
+    "category": "光标移动",
+    "desc": "光标**左**移一格",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 7,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        6
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "l",
+    "category": "光标移动",
+    "desc": "光标**右**移一格",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        2
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "<CR>",
+    "category": "光标移动",
+    "desc": "光标移到**下一行行首**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        2,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "-",
+    "category": "光标移动",
+    "desc": "光标移到**上一行行首**",
+    "alts": [],
+    "measured": {
+      "line": 5,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        4,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "_",
+    "category": "光标移动",
+    "desc": "光标移到当前行**第一个非空字符**（不吃计数时的 `^` 变体）",
+    "alts": [],
+    "measured": {
+      "line": 5,
+      "col": 6,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        5,
+        3
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gj",
+    "category": "光标移动",
+    "desc": "按**屏幕行**下移（'wrap' 打开时和 `j` 不同）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        2,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gk",
+    "category": "光标移动",
+    "desc": "按**屏幕行**上移",
+    "alts": [],
+    "measured": {
+      "line": 5,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        4,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "g0",
+    "category": "光标移动",
+    "desc": "跳到**屏幕行**行首",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 7,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "g$",
+    "category": "光标移动",
+    "desc": "跳到**屏幕行**行尾",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        37
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gE",
+    "category": "光标移动",
+    "desc": "往前到上一个字串的**词尾**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 10,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        5
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gm",
+    "category": "光标移动",
+    "desc": "跳到**屏幕行**中间",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        37
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gM",
+    "category": "光标移动",
+    "desc": "跳到**文本行**中间",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        19
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "<C-A>",
+    "category": "数字增减",
+    "desc": "把光标处的数字 **+1**（改配置时天天用）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 11,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "count = 42"
+      ],
+      "cursor": [
+        1,
+        10
+      ],
+      "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "count = 41"
+      ],
+      "selection": null,
+      "doc": [
+        "count = 41"
+      ]
+    }
+  },
+  {
+    "key": "<C-X>",
+    "category": "数字增减",
+    "desc": "把光标处的数字 **-1**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 11,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "count = 40"
+      ],
+      "cursor": [
+        1,
+        10
+      ],
+      "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "count = 41"
+      ],
+      "selection": null,
+      "doc": [
+        "count = 41"
+      ]
+    }
+  },
+  {
+    "key": "[[",
+    "category": "[] 跳转族",
+    "desc": "跳到**上一个函数/段落开头**（`{` 在行首）",
+    "alts": [],
+    "measured": {
+      "line": 7,
+      "col": 3,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "]]",
+    "category": "[] 跳转族",
+    "desc": "跳到**下一个函数/段落开头**",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        10,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "[]",
+    "category": "[] 跳转族",
+    "desc": "跳到上一个函数**结尾**（`}` 在行首）",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "][",
+    "category": "[] 跳转族",
+    "desc": "跳到下一个函数**结尾**",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        10,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "[(",
+    "category": "[] 跳转族",
+    "desc": "跳到**外层未配对**的 `(`",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "cursor": [
+        2,
+        10
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "selection": null,
+      "doc": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ]
+    }
+  },
+  {
+    "key": "])",
+    "category": "[] 跳转族",
+    "desc": "跳到**下一个未配对**的 `)`",
+    "alts": [],
+    "measured": {
+      "line": 2,
+      "col": 11,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "cursor": [
+        2,
+        11
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "selection": null,
+      "doc": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ]
+    }
+  },
+  {
+    "key": "[{",
+    "category": "[] 跳转族",
+    "desc": "跳到**外层未配对**的 `{`",
+    "alts": [],
+    "measured": {
+      "line": 6,
+      "col": 3,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "cursor": [
+        5,
+        11
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "selection": null,
+      "doc": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ]
+    }
+  },
+  {
+    "key": "]}",
+    "category": "[] 跳转族",
+    "desc": "跳到**下一个未配对**的 `}`",
+    "alts": [],
+    "measured": {
+      "line": 5,
+      "col": 13,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "cursor": [
+        5,
+        11
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ],
+      "selection": null,
+      "doc": [
+        "function f(a, b)",
+        "  return (a + b",
+        "end",
+        "",
+        "local t = {",
+        "  1,"
+      ]
+    }
+  },
+  {
+    "key": "[m",
+    "category": "[] 跳转族",
+    "desc": "跳到上一个**方法边界**（C 风格 `/* */`）",
+    "alts": [],
+    "measured": {
+      "line": 4,
+      "col": 3,
+      "pre": "",
+      "ft": "c",
+      "result": [
+        "int main(void) {",
+        "  /* start */",
+        "  return 0;",
+        "  /* end */",
+        "}"
+      ],
+      "cursor": [
+        1,
+        16
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "int main(void) {",
+        "  /* start */",
+        "  return 0;",
+        "  /* end */",
+        "}"
+      ],
+      "selection": null,
+      "doc": [
+        "int main(void) {",
+        "  /* start */",
+        "  return 0;",
+        "  /* end */",
+        "}"
+      ]
+    }
+  },
+  {
+    "key": "]m",
+    "category": "[] 跳转族",
+    "desc": "跳到下一个方法边界",
+    "alts": [],
+    "measured": {
+      "line": 2,
+      "col": 3,
+      "pre": "",
+      "ft": "c",
+      "result": [
+        "int main(void) {",
+        "  /* start */",
+        "  return 0;",
+        "  /* end */",
+        "}"
+      ],
+      "cursor": [
+        5,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "int main(void) {",
+        "  /* start */",
+        "  return 0;",
+        "  /* end */",
+        "}"
+      ],
+      "selection": null,
+      "doc": [
+        "int main(void) {",
+        "  /* start */",
+        "  return 0;",
+        "  /* end */",
+        "}"
+      ]
+    }
+  },
+  {
+    "key": "[s",
+    "category": "[] 跳转族",
+    "desc": "跳到上一个**拼错的词**（要 `:set spell`）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 7,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local mispelled = 1"
+      ],
+      "cursor": [
+        1,
+        7
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local mispelled = 1"
+      ],
+      "selection": null,
+      "doc": [
+        "local mispelled = 1"
+      ]
+    }
+  },
+  {
+    "key": "]s",
+    "category": "[] 跳转族",
+    "desc": "跳到下一个拼错的词",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local mispelled = 1"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local mispelled = 1"
+      ],
+      "selection": null,
+      "doc": [
+        "local mispelled = 1"
+      ]
+    }
+  },
+  {
+    "key": "`[",
+    "category": "标记跳转",
+    "desc": "跳到**上次修改**的开头",
+    "alts": [],
+    "measured": {
+      "line": 2,
+      "col": 1,
+      "pre": "yy",
+      "ft": null,
+      "result": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "cursor": [
+        2,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ]
+    }
+  },
+  {
+    "key": "`]",
+    "category": "标记跳转",
+    "desc": "跳到**上次修改**的结尾",
+    "alts": [],
+    "measured": {
+      "line": 2,
+      "col": 1,
+      "pre": "yy",
+      "ft": null,
+      "result": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "cursor": [
+        2,
+        3
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ]
+    }
+  },
+  {
+    "key": "`{",
+    "category": "标记跳转",
+    "desc": "跳到当前**段落**的开头",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "aaa",
+        "",
+        "bbb"
+      ],
+      "cursor": [
+        2,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "",
+        "bbb"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "",
+        "bbb"
+      ]
+    }
+  },
+  {
+    "key": "`}",
+    "category": "标记跳转",
+    "desc": "跳到当前段落的结尾",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "aaa",
+        "",
+        "bbb"
+      ],
+      "cursor": [
+        2,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "",
+        "bbb"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "",
+        "bbb"
+      ]
+    }
+  },
+  {
+    "key": "''",
+    "category": "标记跳转",
+    "desc": "跳回**上一次跳转**所在行（行首）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "G",
+      "ft": null,
+      "result": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ]
+    }
+  },
+  {
+    "key": "``",
+    "category": "标记跳转",
+    "desc": "跳回上一次跳转的**精确位置**（行+列）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "G",
+      "ft": null,
+      "result": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "bbb",
+        "ccc"
+      ]
+    }
+  },
+  {
+    "key": "gv",
+    "category": "g 族",
+    "desc": "**重选**上次的可视区",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "viw",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        5
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": {
+        "l2": 1,
+        "c2": 5,
+        "l1": 1,
+        "c1": 1
+      },
+      "doc": null
+    }
+  },
+  {
+    "key": "gi",
+    "category": "g 族",
+    "desc": "跳到**上次插入的位置**并进插入模式",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 3,
+      "pre": "iX\u001bG",
+      "ft": null,
+      "result": [
+        "loXcal Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        3
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "loXcal Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gI",
+    "category": "g 族",
+    "desc": "在**第 1 列**插入（不管缩进）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 3,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gd",
+    "category": "g 族",
+    "desc": "跳到**局部定义**（只在函数内找）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 4,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        4
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gD",
+    "category": "g 族",
+    "desc": "跳到**全局定义**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 4,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        4
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gf",
+    "category": "g 族",
+    "desc": "打开光标下的**文件名**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gT",
+    "category": "g 族",
+    "desc": "切到**上一个**标签页",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "gt",
+    "category": "g 族",
+    "desc": "切到**下一个**标签页",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "g<Tab>",
+    "category": "g 族",
+    "desc": "切到**上次访问**的标签页",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "g*",
+    "category": "g 族",
+    "desc": "向下搜当前词，**不加词边界**（和 `*` 的区别）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 7,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local total = 1",
+        "total = 2",
+        "print(total)"
+      ],
+      "cursor": [
+        2,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local total = 1",
+        "total = 2",
+        "print(total)"
+      ],
+      "selection": null,
+      "doc": [
+        "local total = 1",
+        "total = 2",
+        "print(total)"
+      ]
+    }
+  },
+  {
+    "key": "g#",
+    "category": "g 族",
+    "desc": "向上反向搜当前词，不加边界",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 7,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local total = 1",
+        "total = 2",
+        "print(total)"
+      ],
+      "cursor": [
+        3,
+        7
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local total = 1",
+        "total = 2",
+        "print(total)"
+      ],
+      "selection": null,
+      "doc": [
+        "local total = 1",
+        "total = 2",
+        "print(total)"
+      ]
+    }
+  },
+  {
+    "key": "g&",
+    "category": "g 族",
+    "desc": "在**整个文件**重复上一次 `:s`",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":s/aaa/ZZZ/\r",
+      "ft": null,
+      "result": [
+        "ZZZ bbb",
+        "ZZZ ccc"
+      ],
+      "cursor": [
+        2,
+        1
+      ],
+      "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "ZZZ bbb",
+        "aaa ccc"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa bbb",
+        "aaa ccc"
+      ]
+    }
+  },
+  {
+    "key": "g?",
+    "category": "g 族",
+    "desc": "Rot13 编码整行（冷门但确实存在）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "g??",
+      "ft": null,
+      "result": [
+        "ybpny Gbgny = pbzchgr(n, o) + 1, gnvy",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "ybpny Gbgny = pbzchgr(n, o) + 1, gnvy",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "za",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**开关**当前折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": true,
+      "foldChanged": true,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zo",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**展开**当前折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": true,
+      "foldChanged": true,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zc",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**收起**当前折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zR",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**展开全部**折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": true,
+      "foldChanged": true,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zM",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**收起全部**折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zO",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**递归展开**当前折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": true,
+      "foldChanged": true,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zC",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**递归收起**当前折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zv",
+    "category": "z 族（折叠/滚动）",
+    "desc": "展开到**刚好能看见**光标行",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": true,
+      "foldChanged": true,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "zA",
+    "category": "z 族（折叠/滚动）",
+    "desc": "递归开关当前折叠",
+    "alts": [],
+    "measured": {
+      "line": 3,
+      "col": 3,
+      "pre": ":set foldmethod=indent\r zM",
+      "ft": "lua",
+      "result": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "cursor": [
+        3,
+        4
+      ],
+      "changed": true,
+      "foldChanged": true,
+      "tabsChanged": false,
+      "before": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ],
+      "selection": null,
+      "doc": [
+        "local function outer()",
+        "  local a = 1",
+        "  local b = 2",
+        "end",
+        "",
+        "local function outer2()",
+        "  return a + b",
+        "end",
+        "",
+        "local tail = 0"
+      ]
+    }
+  },
+  {
+    "key": "z<CR>",
+    "category": "z 族（折叠/滚动）",
+    "desc": "把当前行滚到窗口**顶部**（等价 `zt`）",
+    "alts": [],
+    "measured": {
+      "line": 5,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        5,
+        3
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "z.",
+    "category": "z 族（折叠/滚动）",
+    "desc": "把当前行滚到窗口**中间**（等价 `zz`）",
+    "alts": [],
+    "measured": {
+      "line": 5,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        5,
+        3
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "z-",
+    "category": "z 族（折叠/滚动）",
+    "desc": "把当前行滚到窗口**底部**（等价 `zb`）",
+    "alts": [],
+    "measured": {
+      "line": 5,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "cursor": [
+        5,
+        3
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "local Total = compute(a, b) + 1, tail",
+        "local name = \"hello world\"",
+        "",
+        "function f(x)",
+        "  return { key = 'val' }",
+        "end",
+        "",
+        "-- a paragraph",
+        "second line here",
+        "third line here"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "z=",
+    "category": "z 族（折叠/滚动）",
+    "desc": "给拼错的词**建议列表**（要 `:set spell`）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":set spell\r",
+      "ft": null,
+      "result": [
+        "mispelled wrod"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "mispelled wrod"
+      ],
+      "selection": null,
+      "doc": [
+        "mispelled wrod"
+      ]
+    }
+  },
+  {
+    "key": "zg",
+    "category": "z 族（折叠/滚动）",
+    "desc": "把词标记为**正确**（写进 spellfile）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":set spell spellfile=/tmp/reflex-probe-spell-zg.add\r",
+      "ft": null,
+      "result": [
+        "mispelled"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "mispelled"
+      ],
+      "selection": null,
+      "doc": [
+        "mispelled"
+      ]
+    }
+  },
+  {
+    "key": "zw",
+    "category": "z 族（折叠/滚动）",
+    "desc": "把词标记为**错误**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":set spell spellfile=/tmp/reflex-probe-spell-zw.add\r",
+      "ft": null,
+      "result": [
+        "hello"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "hello"
+      ],
+      "selection": null,
+      "doc": [
+        "hello"
+      ]
+    }
+  },
+  {
+    "key": "zug",
+    "category": "z 族（折叠/滚动）",
+    "desc": "**撤销** `zg`",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":set spell spellfile=/tmp/reflex-probe-spell-zug.add\r",
+      "ft": null,
+      "result": [
+        "mispelled"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "mispelled"
+      ],
+      "selection": null,
+      "doc": [
+        "mispelled"
+      ]
+    }
+  },
+  {
+    "key": "zh",
+    "category": "z 族（折叠/滚动）",
+    "desc": "向左滚一列（要 `:set nowrap`）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":set nowrap\r",
+      "ft": null,
+      "result": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "selection": null,
+      "doc": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ]
+    }
+  },
+  {
+    "key": "zl",
+    "category": "z 族（折叠/滚动）",
+    "desc": "向右滚一列",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":set nowrap\r",
+      "ft": null,
+      "result": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "cursor": [
+        1,
+        10
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "selection": null,
+      "doc": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ]
+    }
+  },
+  {
+    "key": "zs",
+    "category": "z 族（折叠/滚动）",
+    "desc": "把光标**滚到屏幕最左**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 20,
+      "pre": ":set nowrap\r",
+      "ft": null,
+      "result": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "cursor": [
+        1,
+        20
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "selection": null,
+      "doc": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ]
+    }
+  },
+  {
+    "key": "ze",
+    "category": "z 族（折叠/滚动）",
+    "desc": "把光标**滚到屏幕最右**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":set nowrap\r",
+      "ft": null,
+      "result": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ],
+      "selection": null,
+      "doc": [
+        "abcdefghijklmnopqrstuvwxyz0123456789"
+      ]
+    }
+  },
+  {
+    "key": "ZZ",
+    "category": "退出 / 命令行",
+    "desc": "**保存并退出**（write + quit）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "exittest"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "exittest"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "ZQ",
+    "category": "退出 / 命令行",
+    "desc": "**不保存退出**（quit）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "exittest"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "exittest"
+      ],
+      "selection": null,
+      "doc": null
+    }
+  },
+  {
+    "key": "q:",
+    "category": "退出 / 命令行",
+    "desc": "打开**命令行窗口**（历史命令可以像文本一样改）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "hello"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "hello"
+      ],
+      "selection": null,
+      "doc": [
+        "hello"
+      ]
+    }
+  },
+  {
+    "key": "q/",
+    "category": "退出 / 命令行",
+    "desc": "打开**搜索历史**的命令行窗口",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "hello"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "hello"
+      ],
+      "selection": null,
+      "doc": [
+        "hello"
+      ]
+    }
+  },
+  {
+    "key": "q?",
+    "category": "退出 / 命令行",
+    "desc": "打开**反向搜索历史**的命令行窗口",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "hello"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "hello"
+      ],
+      "selection": null,
+      "doc": [
+        "hello"
+      ]
+    }
+  },
+  {
+    "key": "K",
+    "category": "退出 / 命令行",
+    "desc": "查光标下单词的**手册**（`K`，要 `:set keywordprg`）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "PRINTF(1)                   General Commands Manual                   PRINTF(1)",
+        "",
+        "NAME",
+        "       printf  - Print output based off of the format string and proceeding ar‐",
+        "       guments.",
+        "",
+        "SYNOPSIS",
+        "       printf [--help] [--version] [FORMAT] [ARGUMENT]",
+        "",
+        "DESCRIPTION",
+        "       Print output based off of the format string and proceeding arguments.",
+        "",
+        "OPTIONS",
+        "       --help Print help information",
+        "",
+        "       --version",
+        "              Print version information",
+        "",
+        "       [FORMAT]",
+        "",
+        "       [ARGUMENT]",
+        "",
+        "EXTRA",
+        "       basic anonymous string templating:",
+        "",
+        "       prints format string at least once, repeating as long as there  are  re‐",
+        "       maining arguments output prints escaped literals in the format string as",
+        "       character literals output replaces anonymous fields with the next unused",
+        "       argument, formatted according to the field.",
+        "",
+        "       Prints the , replacing escaped character sequences with character liter‐",
+        "       als and substitution field sequences with passed arguments",
+        "",
+        "       literally,  with the exception of the below escaped character sequences,",
+        "       and the substitution sequences described further down.",
+        "",
+        "       ### ESCAPE SEQUENCES",
+        "",
+        "       The following escape sequences, organized here  in  alphabetical  order,",
+        "       will print the corresponding character literal:",
+        "",
+        "       - \\\" double quote",
+        "",
+        "       - \\\\ backslash",
+        "",
+        "       - \\\\a alert (BEL)",
+        "",
+        "       - \\\\b backspace",
+        "",
+        "       - \\\\c End-of-Input",
+        "",
+        "       - \\\\e escape",
+        "",
+        "       - \\\\f form feed",
+        "",
+        "       - \\\\n new line",
+        "",
+        "       - \\\\r carriage return",
+        "",
+        "       - \\\\t horizontal tab",
+        "",
+        "       - \\\\v vertical tab",
+        "",
+        "       - \\\\NNN byte with value expressed in octal value NNN (1 to 3 digits)",
+        "                 values greater than 256 will be treated",
+        "",
+        "       -  \\\\xHH  byte with value expressed in hexadecimal value NN (1 to 2 dig‐",
+        "       its)",
+        "",
+        "       - \\\\uHHHH Unicode (IEC 10646) character with value expressed in hexadec‐",
+        "       imal value HHHH (4 digits)",
+        "",
+        "       - \\\\uHHHH Unicode character with value expressed  in  hexadecimal  value",
+        "       HHHH (8 digits)",
+        "",
+        "       - %% a single %",
+        "",
+        "       ### SUBSTITUTIONS",
+        "",
+        "       #### SUBSTITUTION QUICK REFERENCE",
+        "",
+        "       Fields",
+        "",
+        "       -  %s:  string  - %b: string parsed for literals second parameter is max",
+        "       length",
+        "",
+        "       - %c: char no second parameter",
+        "",
+        "       - %i or %d: 64-bit integer - %u: 64 bit unsigned integer  -  %x  or  %X:",
+        "       64-bit unsigned integer as hex - %o: 64-bit unsigned integer as octal",
+        "                   second parameter is min-width, integer",
+        "                   output below that width is padded with leading zeroes",
+        "",
+        "       - %q: ARGUMENT is printed in a format that can be reused as shell input,",
+        "       escaping non-printable",
+        "                   characters with the proposed POSIX $'' syntax.",
+        "",
+        "       - %f or %F: decimal floating point value - %e or %E: scientific notation",
+        "       floating  point value - %g or %G: shorter of specially interpreted deci‐",
+        "       mal or SciNote floating point value.",
+        "                   second parameter is",
+        "                     -max places after decimal point for floating point output",
+        "                     -max number of significant digits for scientific  notation",
+        "       output",
+        "",
+        "       parameterizing fields",
+        "",
+        "       examples:",
+        "",
+        "       printf '%4.3i' 7",
+        "",
+        "       It  has  a first parameter of 4 and a second parameter of 3 and will re‐",
+        "       sult in ' 007'",
+        "",
+        "       printf '%.1s' abcde",
+        "",
+        "       It has no first parameter and a second parameter of 1 and will result in",
+        "       'a'",
+        "",
+        "       printf '%4c' q",
+        "",
+        "       It has a first parameter of 4 and no second parameter and will result in",
+        "       ' q'",
+        "",
+        "       The first parameter of a field is the minimum width to pad the output to",
+        "       if the output is less than this absolute value of this width, it will be",
+        "       padded with leading spaces, or, if the argument is negative, with trail‐",
+        "       ing spaces. the default is zero.",
+        "",
+        "       The second parameter of a field is particular to the output field  type.",
+        "       defaults can be found in the full substitution help below",
+        "",
+        "       special prefixes to numeric arguments",
+        "",
+        "       - 0: (e.g. 010) interpret argument as octal (integer output fields only)",
+        "       -  0x:  (e.g.  0xABC)  interpret  argument as hex (numeric output fields",
+        "       only) - \\': (e.g. \\'a) interpret argument as a character constant",
+        "",
+        "       #### HOW TO USE SUBSTITUTIONS",
+        "",
+        "       Substitutions are used to pass additional argument(s)  into  the  FORMAT",
+        "       string, to be formatted a particular way. E.g.",
+        "",
+        "       printf 'the letter %X comes before the letter %X' 10 11",
+        "",
+        "       will print",
+        "",
+        "       the letter A comes before the letter B",
+        "",
+        "       because  the  substitution  field %X means 'take an integer argument and",
+        "       write it as a hexadecimal number'",
+        "",
+        "       Passing more arguments than are in the format string will cause the for‐",
+        "       mat string to be repeated for the remaining substitutions",
+        "",
+        "       printf 'it is %i F in %s \\n' 22 Portland 25 Boston 27 New York",
+        "",
+        "       will print",
+        "",
+        "       it is 22 F in Portland it is 25 F in Boston it is 27 F in Boston",
+        "",
+        "       If a format string is printed but there  are  less  arguments  remaining",
+        "       than there are substitution fields, substitution fields without an argu‐",
+        "       ment will default to empty strings, or for numeric fields the value 0",
+        "",
+        "       #### AVAILABLE SUBSTITUTIONS",
+        "",
+        "       This program, like GNU coreutils printf, interprets a modified subset of",
+        "       the POSIX C printf spec, a quick reference to substitutions is below.",
+        "",
+        "       #### STRING SUBSTITUTIONS",
+        "",
+        "       All string fields have a 'max width' parameter %.3s means 'print no more",
+        "       than three characters of the original input'",
+        "",
+        "       - %s: string",
+        "",
+        "       - %b: escaped string - the string will be checked for any escaped liter‐",
+        "       als from",
+        "             the  escaped  literal  list  above,  and translate them to literal",
+        "       characters.",
+        "             e.g. \\\\n will be transformed into a newline character.",
+        "             One special rule about %b mode is that octal literals  are  inter‐",
+        "       preted differently",
+        "             In arguments passed by %b, pass octal-interpreted literals must be",
+        "       in the form of \\0NNN",
+        "             instead of \\\\NNN. (Although, for legacy reasons, octal literals in",
+        "       the form of \\\\NNN will",
+        "             still  be interpreted and not throw a warning, you will have prob‐",
+        "       lems if you use this for a",
+        "             literal whose code begins with zero, as it will be  viewed  as  in",
+        "       \\0NNN form.)",
+        "",
+        "       -  %q: escaped string - the string in a format that can be reused as in‐",
+        "       put by most shells.",
+        "             Non-printable characters are escaped with the POSIX proposed ‘$''’",
+        "       syntax,",
+        "             and shell meta-characters are quoted appropriately.",
+        "             This is an equivalent format to ls --quoting=shell-escape output.",
+        "",
+        "       #### CHAR SUBSTITUTIONS",
+        "",
+        "       The character field does not have a secondary parameter.",
+        "",
+        "       - %c: a single character",
+        "",
+        "       #### INTEGER SUBSTITUTIONS",
+        "",
+        "       All integer fields have a 'pad with zero' parameter %.4i means an  inte‐",
+        "       ger  which if it is less than 4 digits in length, is padded with leading",
+        "       zeros until it is 4 digits in length.",
+        "",
+        "       - %d or %i: 64-bit integer",
+        "",
+        "       - %u: 64-bit unsigned integer",
+        "",
+        "       - %x or %X: 64-bit unsigned integer printed in Hexadecimal (base 16)",
+        "                   %X instead of %x means to  use  uppercase  letters  for  'a'",
+        "       through 'f'",
+        "",
+        "       - %o: 64-bit unsigned integer printed in octal (base 8)",
+        "",
+        "       #### FLOATING POINT SUBSTITUTIONS",
+        "",
+        "       All  floating  point fields have a 'max decimal places / max significant",
+        "       digits' parameter %.10f means a decimal floating point  with  7  decimal",
+        "       places  past 0 %.10e means a scientific notation number with 10 signifi‐",
+        "       cant digits %.10g means the same behavior for decimal and Sci. Note, re‐",
+        "       spectively, and provides the shortest of each's output.",
+        "",
+        "       Like with GNU coreutils, the value after the decimal point is these out‐",
+        "       puts is parsed as a double first before being rendered to text. For both",
+        "       implementations do not expect meaningful precision past the 18th decimal",
+        "       place. When using a number of decimal places that is 18 or  higher,  you",
+        "       can  expect  variation  in  output between GNU coreutils printf and this",
+        "       printf at the 18th decimal place of +/- 1",
+        "",
+        "       - %f: floating point value presented in decimal, truncated and displayed",
+        "       to 6 decimal places by",
+        "             default. There is not past-double behavior parity  with  Coreutils",
+        "       printf, values are not",
+        "             estimated or adjusted beyond input values.",
+        "",
+        "       - %e or %E: floating point value presented in scientific notation",
+        "                   7 significant digits by default",
+        "                   %E means use to use uppercase E for the mantissa.",
+        "",
+        "       -  %g  or  %G: floating point value presented in the shortest of decimal",
+        "       and scientific notation",
+        "                   behaves differently from %f and %E, please see posix  printf",
+        "       spec for full details,",
+        "                   some examples of different behavior:",
+        "                   Sci Note has 6 significant digits by default",
+        "                   Trailing zeroes are removed",
+        "                   Instead of being truncated, digit after last is rounded",
+        "",
+        "       Like  other  behavior  in  this  utility, the design choices of floating",
+        "       point behavior in this utility is selected to reproduce in exact the be‐",
+        "       havior of GNU coreutils' printf from an inputs and outputs standpoint.",
+        "",
+        "       ### USING PARAMETERS",
+        "",
+        "       Most substitution fields can be parameterized using up to 2 numbers that",
+        "       can be passed to the field, between the % sign and the field letter.",
+        "",
+        "       The 1st parameter always indicates the minimum width of  output,  it  is",
+        "       useful  for creating columnar output. Any output that would be less than",
+        "       this minimum width is padded with leading spaces The  2nd  parameter  is",
+        "       proceeded by a dot.  You do not have to use parameters",
+        "",
+        "       ### SPECIAL FORMS OF INPUT",
+        "",
+        "       For  numeric input, the following additional forms of input are accepted",
+        "       besides decimal:",
+        "",
+        "       Octal (only with integer): if the argument begins with a 0 the  proceed‐",
+        "       ing characters will be interpreted as octal (base 8) for integer fields",
+        "",
+        "       Hexadecimal:  if  the  argument begins with 0x the proceeding characters",
+        "       will be interpreted will be interpreted as hex (base 16) for any numeric",
+        "       fields for float fields, hexadecimal input results in a precision  limit",
+        "       (in converting input past the decimal point) of 10^-15",
+        "",
+        "       Character  Constant:  if the argument begins with a single quote charac‐",
+        "       ter, the first byte of the next character  will  be  interpreted  as  an",
+        "       8-bit  unsigned  integer. If there are additional bytes, they will throw",
+        "       an error (unless the environment variable POSIXLY_CORRECT is set)",
+        "",
+        "VERSION",
+        "       v(uutils coreutils) 0.8.0",
+        "",
+        "                                   2026-04-16                         PRINTF(1)",
+        ""
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": true,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "printf"
+      ],
+      "selection": null,
+      "doc": [
+        "printf"
+      ]
+    }
+  },
+  {
+    "key": "do",
+    "category": "其他",
+    "desc": "`:diffget` —— 把差异**拿过来**（diff 模式下）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":diffthis\r",
+      "ft": null,
+      "result": [
+        "aaa",
+        "bbb"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "bbb"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "bbb"
+      ]
+    }
+  },
+  {
+    "key": "dp",
+    "category": "其他",
+    "desc": "`:diffput` —— 把差异**推过去**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":diffthis\r",
+      "ft": null,
+      "result": [
+        "aaa",
+        "bbb"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa",
+        "bbb"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa",
+        "bbb"
+      ]
+    }
+  },
+  {
+    "key": "g8",
+    "category": "其他",
+    "desc": "打印光标处字符的 **UTF-8 字节十六进制**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "中"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "中"
+      ],
+      "selection": null,
+      "doc": [
+        "中"
+      ]
+    }
+  },
+  {
+    "key": "ga",
+    "category": "其他",
+    "desc": "打印光标处字符的 **ASCII / Unicode 码点**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "A"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "A"
+      ],
+      "selection": null,
+      "doc": [
+        "A"
+      ]
+    }
+  },
+  {
+    "key": "g<",
+    "category": "其他",
+    "desc": "显示**上一次命令的输出**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":echo 'hello'\r",
+      "ft": null,
+      "result": [
+        "aaa"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa"
+      ]
+    }
+  },
+  {
+    "key": "@:",
+    "category": "其他",
+    "desc": "重复上一次的 **`:` 命令**",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": ":s/aaa/bbb/\r",
+      "ft": null,
+      "result": [
+        "bbb"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "bbb"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa"
+      ]
+    }
+  },
+  {
+    "key": "gQ",
+    "category": "其他",
+    "desc": "切到 **Ex 模式**（`Q` 在现代 Vim 里的替代）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "aaa"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa"
+      ]
+    }
+  },
+  {
+    "key": "gR",
+    "category": "其他",
+    "desc": "进**虚拟替换模式**（替换时不破坏 tab）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "RXY<Esc>",
+      "ft": null,
+      "result": [
+        "XYcdef"
+      ],
+      "cursor": [
+        1,
+        1
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "XYcdef"
+      ],
+      "selection": null,
+      "doc": [
+        "abcdef"
+      ]
+    }
+  },
+  {
+    "key": "gV",
+    "category": "其他",
+    "desc": "**不重选**上次可视区（和 `gv` 相反）",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "viw",
+      "ft": null,
+      "result": [
+        "aaa"
+      ],
+      "cursor": [
+        1,
+        3
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "aaa"
+      ],
+      "selection": null,
+      "doc": [
+        "aaa"
+      ]
+    }
+  },
+  {
+    "key": "g^",
+    "category": "其他",
+    "desc": "跳到屏幕行第一个非空字符",
+    "alts": [],
+    "measured": {
+      "line": 1,
+      "col": 1,
+      "pre": "",
+      "ft": null,
+      "result": [
+        "    abc"
+      ],
+      "cursor": [
+        1,
+        5
+      ],
+      "changed": false,
+      "foldChanged": false,
+      "tabsChanged": false,
+      "before": [
+        "    abc"
+      ],
+      "selection": null,
+      "doc": [
+        "    abc"
       ]
     }
   }
@@ -4948,7 +8716,14 @@ export const CORE_CATEGORIES: string[] = [
   "括号跳转",
   "搜索词",
   "替换",
-  "插入模式编辑"
+  "插入模式编辑",
+  "数字增减",
+  "[] 跳转族",
+  "标记跳转",
+  "g 族",
+  "z 族（折叠/滚动）",
+  "退出 / 命令行",
+  "其他"
 ];
 
 /** 测了但不出题的 —— 页面上单独列出，用户能核对这个判断 */
@@ -5002,18 +8777,6 @@ export const CORE_SKIPPED: CoreSkipped[] = [
     "reason": "「停止录制」是宏的一部分，单独出题没意义（@a / @@ 已覆盖宏的用法）"
   },
   {
-    "key": "za",
-    "reason": "headless 下没有折叠可开 —— 实测无变化，**测不出效果就不出题**"
-  },
-  {
-    "key": "zR",
-    "reason": "同上，headless 下测不出折叠行为"
-  },
-  {
-    "key": "zM",
-    "reason": "同上，headless 下测不出折叠行为"
-  },
-  {
     "key": "di[",
     "reason": "标准文档里没有方括号 —— 样本不成立，测不出结果"
   },
@@ -5040,6 +8803,14 @@ export const CORE_SKIPPED: CoreSkipped[] = [
   {
     "key": "gx",
     "reason": "headless 下打不开系统程序 —— 测不出效果"
+  },
+  {
+    "key": "[c",
+    "reason": "headless 下测不出：changelist 有记录但光标不跳（试了 4 种构造）"
+  },
+  {
+    "key": "]c",
+    "reason": "同上"
   }
 ];
 

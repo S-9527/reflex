@@ -93,17 +93,35 @@ describe("diffLines：拿真实题库数据跑一遍", () => {
   it("标了 changed 的条目，diff 都识别得出变化", () => {
     const bad: string[] = [];
     for (const item of CORE_ITEMS) {
-      // ⚠️ 只查标了 changed 的 —— `yy` / `V` / `w` 这些纯复制或纯移动
-      //    本来就不改 buffer，diff 全是 same 是**对的**
-      //    （第一版忘了这个 guard，把一堆 motion 当成失败）
       if (!item.measured.changed) continue;
-      const rows = diffLines(item.measured.before, item.measured.result);
+      /**
+       * ⚠️⚠️ 折叠 / 标签页类的「有效果」**不在 buffer 文本上**。
+       *
+       * `za` 改的是折叠状态、`gt` 改的是当前标签页 —— 文本和光标都不动，
+       * 所以 diff 全是 `same` 是对的。界面要另外说明「改的是折叠状态」，
+       * 不能画一个空的 diff 说「什么也没做」。
+       */
+      const m = item.measured;
+      if (m.foldChanged || m.tabsChanged) continue;
+      const rows = diffLines(m.before, m.result);
       if (!hasChange(rows)) bad.push(item.key);
     }
     expect(
       bad,
       `这些条目数据说 changed 但 diff 认不出来（界面不会显示箭头）：\n${bad.join("\n")}`,
     ).toEqual([]);
+  });
+
+  it("折叠/标签页类的条目，changed 由状态变化解释（不是凭空标的）", () => {
+    for (const item of CORE_ITEMS) {
+      const m = item.measured;
+      if (!m.changed || !(m.foldChanged || m.tabsChanged)) continue;
+      // 这类条目应该**文本没变**，changed 完全来自状态
+      expect(
+        JSON.stringify(m.before),
+        `${item.key} 标了状态变化，但文本其实变了 —— 应该由 diff 来解释`,
+      ).toBe(JSON.stringify(m.result));
+    }
   });
 
   it("没改变 buffer 的条目，diff 确实没有变化", () => {
