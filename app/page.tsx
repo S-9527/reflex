@@ -280,6 +280,14 @@ export default function HomePage() {
         <Link href="/seq" className="text-blue-400 hover:underline">
           盲背模式 →
         </Link>
+        {/*
+          ⚠️ 这一页回答「练全了没有」——
+          分母是 Vim 官方的 doc/index.txt（479 条命令），
+          分子是全部板块的题库，逐条标状态，缺口自己浮出来。
+        */}
+        <Link href="/coverage" className="text-amber-400 hover:underline">
+          覆盖率对照（还差什么）→
+        </Link>
       </div>
 
       <p className="mt-4 text-[10px] leading-relaxed text-neutral-700">

@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "gen:core": "nvim --headless -c 'luafile scripts/probe-core.lua' -c 'qa!' && node scripts/build-core.mjs",
+    "gen:keys": "node scripts/build-dataset.mjs",
+    "gen:index": "node scripts/build-vim-index.mjs && node scripts/build-vim-index-ts.mjs",
+    "gen": "pnpm gen:keys && pnpm gen:index && pnpm gen:core"
   },
   "dependencies": {
     "next": "16.3.8",
