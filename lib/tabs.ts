@@ -54,6 +54,12 @@ export function newTab(state: TabState): TabState {
   return { tabs, cur: state.cur + 1, nextId: state.nextId + 1 };
 }
 
+/** 私有：切到某个下标 */
+function moveTo(state: TabState, target: number): TabState {
+  if (target === state.cur) return state;
+  return { ...state, cur: target };
+}
+
 /** 私有:删掉若干 tab(按下标),并把 cur 落到还活着的上面 */
 function remove(state: TabState, idxs: Set<number>, preferRight: boolean): TabState | null {
   if (idxs.size === 0) return null;
@@ -102,31 +108,31 @@ export function closeOtherTabs(state: TabState): TabState | null {
  */
 export function nextTab(state: TabState): TabState | null {
   if (state.cur >= state.tabs.length - 1) return null;
-  return { ...state, cur: state.cur + 1 };
+  return moveTo(state, state.cur + 1);
 }
 
 export function prevTab(state: TabState): TabState | null {
   if (state.cur <= 0) return null;
-  return { ...state, cur: state.cur - 1 };
+  return moveTo(state, state.cur - 1);
 }
 
 /** `<Tab>f`:跳到第一个 */
 export function firstTab(state: TabState): TabState | null {
   if (state.cur === 0) return null;
-  return { ...state, cur: 0 };
+  return moveTo(state, 0);
 }
 
 /** `<Tab>l`:跳到最后一个 */
 export function lastTab(state: TabState): TabState | null {
   if (state.cur === state.tabs.length - 1) return null;
-  return { ...state, cur: state.tabs.length - 1 };
+  return moveTo(state, state.tabs.length - 1);
 }
 
 /** 跳到指定下标(Vim 的 `:{n}` 或 <Tab>{n}) */
 export function goTo(state: TabState, n: number): TabState | null {
   if (n < 0 || n >= state.tabs.length) return null;
   if (n === state.cur) return null;
-  return { ...state, cur: n };
+  return moveTo(state, n);
 }
 
 /* ---------------------------------------------------------------- 题库 */
@@ -142,6 +148,7 @@ export type TabTask = {
 };
 
 export const TAB_TASKS: TabTask[] = [
+  // ---- LazyVim 的 `<Space><Tab>` 那一族（有 rhs，来自 nvim_get_keymap）----
   { key: "<Tab><Tab>", desc: "新开一个标签页", tabs: 2, curIndex: 0 },
   { key: "<Tab>d", desc: "关掉当前标签页", tabs: 3, curIndex: 1 },
   { key: "<Tab>o", desc: "只留当前标签页", tabs: 4, curIndex: 1 },
@@ -149,6 +156,7 @@ export const TAB_TASKS: TabTask[] = [
   { key: "<Tab>[", desc: "跳到上一个标签页", tabs: 3, curIndex: 2 },
   { key: "<Tab>f", desc: "跳到第一个标签页", tabs: 3, curIndex: 2 },
   { key: "<Tab>l", desc: "跳到最后一个标签页", tabs: 3, curIndex: 0 },
+
 ];
 
 export function stateFrom(t: TabTask): TabState {
@@ -215,6 +223,39 @@ export function applyTabKey(key: string, s: TabState): TabState | null {
     default: return null;
   }
 }
+
+/**
+ * Vim **内建**的标签页键 —— 它们不在 `COMMANDS` 里（`nvim_get_keymap` 看不见），
+ * 所以页面拿不到 `native` / `alternates`，要单独给一句说明。
+ *
+ * 用户问过「标签页那里怎么没有标出 gt gT」—— 它们之前**完全不存在**，
+ * 现在补上了，但光有一个键不够：得说清楚它是**内建**、比 LazyVim 那套更短。
+ */
+/**
+ * **Vim 内建**的等价键 —— 只作为**旁边的标注**，不出题。
+ *
+ * ## ⚠️⚠️ 这是这一页的设计口径（用户原话）
+ *
+ * > 都是使用 lazyvim 的按键为主，vim 只是在旁边作为标注，增强记忆而已
+ *
+ * 所以 `gt` / `gT` / `g<Tab>` **不能**做成题目 —— 那会变成
+ * 「练 Vim 原生、LazyVim 当次解」，方向正好反了。
+ *
+ * 它们的正确位置是：**在做 LazyVim 那道题时，旁边标一句**「Vim 里对应 gt」。
+ * 用户按的还是 `<Space><Tab>]`，只是顺带记住还有个更短的写法。
+ *
+ * ## 为什么之前完全没有
+ *
+ * 本机 `nvim_get_keymap` 里 `gt` / `gT` / `g<Tab>` **一条都没有**
+ * （它们是内建命令，不是映射）—— 所以抽取阶段就看不到。
+ * 这和数据源那个老问题同源，但**处理方式不同**：
+ * 内建操作该进 `/core` 出题，而**同一操作的更短写法**只该做标注。
+ */
+export const NATIVE_ALIAS: Record<string, { key: string; note: string }[]> = {
+  "<Tab>]": [{ key: "gt", note: "Vim 内建：g 加 t，两键，不用 leader" }],
+  "<Tab>[": [{ key: "gT", note: "Vim 内建：g 加 T（大写），两键" }],
+  "<Tab>l": [{ key: "g<Tab>", note: "Vim 内建：在最近两个标签页之间来回切" }],
+};
 
 /** 这个键要在浏览器里按几下的提示 */
 export const TAB_ARITY: Record<string, number> = {

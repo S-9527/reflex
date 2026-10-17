@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { TAB_TASKS, stateFrom, applyTabKey, count, type TabState } from "@/lib/tabs";
+import { TAB_TASKS, stateFrom, applyTabKey, count, NATIVE_ALIAS, type TabState } from "@/lib/tabs";
 import { COMMANDS } from "@/lib/bindings";
 import { taskIdOf } from "@/lib/task-id";
 import type { DrillTask } from "@/lib/drill";
@@ -85,6 +85,7 @@ function splitSeq(s: string): string[] {
 
 const TASKS: DrillTask[] = TAB_TASKS.map((t, i) => {
   const cmd = commandFor(t);
+
   const accept = cmd
     ? [[...splitSeq(cmd.display)], ...cmd.alternates.map((a) => [...splitSeq(a)])]
     : [[...splitSeq(t.key)]];
@@ -122,6 +123,13 @@ export default function TabDrill() {
   });
 
   const cmd = CMD_OF.get(d.task.id) ?? null;
+  /**
+   * ⚠️ Vim 内建的**等价写法** —— 只做标注，不出题。
+   *
+   * 用户口径：「都是使用 lazyvim 的按键为主，vim 只是在旁边作为标注」。
+   * 所以这里按题目找它的原生对应，显示在解法详情旁边。
+   */
+  const nativeAlias = NATIVE_ALIAS[d.task.short] ?? [];
 
   return (
     <DrillFlow
@@ -168,6 +176,19 @@ export default function TabDrill() {
             nativeVerified={cmd.nativeVerified}
           />
         )}
+        {/*
+          ⚠️ Vim 内建的等价写法 —— **只标注，不出题**。
+          `gt` / `gT` / `g<Tab>` 在 `nvim_get_keymap` 里看不到（是内建命令），
+          所以拿不到 `native` 字段；但用户要的是「旁边标一下」，
+          不是「多一道题」。练的始终是 LazyVim 那套键。
+        */}
+        {nativeAlias.map((a) => (
+          <div key={a.key} className="mt-2 flex items-baseline gap-2 text-[11px]">
+            <span className="w-14 shrink-0 text-neutral-700">原生</span>
+            <code className="rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">{a.key}</code>
+            <span className="text-neutral-600">{a.note}（只作对照，不作解法）</span>
+          </div>
+        ))}
         <PendingHint pending={d.pending} />
       </TaskBox>
 

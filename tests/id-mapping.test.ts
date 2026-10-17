@@ -52,12 +52,38 @@ describe("buffers 板块", () => {
 
 describe("tabs 板块", () => {
   it("每道题都能映射到全局 id（真实键带 <Space> 前缀）", () => {
+    /**
+     * ⚠️⚠️ Vim 内建的 `gt` / `gT` / `g<Tab>` **映射不到全局 id** ——
+     * 因为 `COMMANDS` 来自 `nvim_get_keymap`，而它看不见内建命令。
+     *
+     * 这不是 bug：它们的进度用本地 id（`tabs:gt`）。
+     * 详见 `lib/boards.ts` 和 `lib/task-id.ts` 的说明。
+     */
+    const BUILTIN = new Set(["gt", "gT", "g<Tab>"]);
     const miss: string[] = [];
     for (const t of TAB_TASKS) {
+      if (BUILTIN.has(t.key)) {
+        expect(globalId(t.key), `${t.key} 是内建键，不该有全局 id`).toBeNull();
+        continue;
+      }
       // ⚠️ 真实 lhs 是 `<Space><Tab>d`，题库里写的是 `<Tab>d`
       if (!globalId(`<Space>${t.key}`) && !globalId(t.key)) miss.push(t.key);
     }
     expect(miss, `这些映射不过去：\n${miss.join("\n")}`).toEqual([]);
+  });
+
+  it("内建键用本地 id，且彼此不撞车", () => {
+    /**
+     * ⚠️ 注意：`<Tab>]` 这类**也**是本地 id（`tabs:<Tab>]`）——
+     * 因为题库里存的是不带 `<Space>` 的简写，而 `globalId` 查的是
+     * `<Space><Tab>]`。这是既有设计（页面上的 `taskIdOf("tabs", t.key)`）。
+     *
+     * 这里只断言「内建键有稳定 id，且不和别的键撞」。
+     */
+    expect(taskIdOf("tabs", "gt")).toBe("tabs:gt");
+    expect(taskIdOf("tabs", "gT")).toBe("tabs:gT");
+    const ids = TAB_TASKS.map((t) => taskIdOf("tabs", t.key));
+    expect(new Set(ids).size, "有重复 id").toBe(ids.length);
   });
 });
 

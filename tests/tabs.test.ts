@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { splitLhs } from "../lib/keys";
 import {
+  NATIVE_ALIAS,
   initial,
   count,
   current,
@@ -169,8 +171,11 @@ describe("toPanelKey —— 浏览器 key 要转成面板记法", () => {
    * 而面板记法是 "<Tab>"，直接拼会得到 "<Tab>Tab"）。
    */
   it("解法逐键反推回浏览器 key 再转回来,结果一致", () => {
+    const BUILTIN = new Set(["gt", "gT", "g<Tab>"]);
     for (const t of TAB_TASKS) {
-      const cmd = commandFor(t)!;
+      const cmd = commandFor(t);
+      if (!cmd) continue; // Vim 内建键不在 COMMANDS 里，见上文说明
+      if (BUILTIN.has(t.key)) continue;
       // 真实键：leader 在浏览器里就是一个空格字符
       const browserKeys = cmd.display
         .replace(/<Space>/g, " ")
@@ -192,7 +197,21 @@ describe("toPanelKey —— 浏览器 key 要转成面板记法", () => {
 
 describe("解法来自真实数据(COMMANDS)", () => {
   it("每道 tab 题都能在数据集里找到命令", () => {
+    /**
+     * ⚠️⚠️ **Vim 内建键不在 `COMMANDS` 里** —— 这是正常的，不是 bug。
+     *
+     * `COMMANDS` 来自 `nvim_get_keymap`，而它**看不见内建命令**。
+     * `gt` / `gT` / `g<Tab>` 是本机没有任何映射的 Vim 内建（实测确认），
+     * 所以这里找不到是**预期行为**。
+     *
+     * 它们的原文/实测证据在 `lib/core-vim.ts`（走破坏性实测那条链）。
+     */
+    const BUILTIN = new Set(["gt", "gT", "g<Tab>"]);
     for (const t of TAB_TASKS) {
+      if (BUILTIN.has(t.key)) {
+        expect(commandFor(t), `${t.key} 是内建键，不该在 COMMANDS 里`).toBeNull();
+        continue;
+      }
       expect(commandFor(t), `${t.key} 找不到对应命令`).not.toBeNull();
     }
   });
@@ -204,8 +223,14 @@ describe("解法来自真实数据(COMMANDS)", () => {
    * `<Space><Tab>d`（leader 是真实空格）。
    * 少一个 `<Space>` = 训练器教的键在真 nvim 里按不出来。
    */
-  it("解法带 <Space> leader 前缀(手写表在这漏过)", () => {
+  it("LazyVim 系的解法带 <Space> leader 前缀(手写表在这漏过)", () => {
+    /**
+     * ⚠️ Vim 内建的 `gt` / `gT` / `g<Tab>` **不带 leader** ——
+     * 它们本来就不在 leader 系里。所以只查 LazyVim 那一族。
+     */
+    const BUILTIN = new Set(["gt", "gT", "g<Tab>"]);
     for (const t of TAB_TASKS) {
+      if (BUILTIN.has(t.key)) continue;
       const cmd = commandFor(t)!;
       expect(cmd.display, `${t.key} 的键漏了 leader`).toMatch(/^<Space>/);
     }
@@ -213,13 +238,20 @@ describe("解法来自真实数据(COMMANDS)", () => {
 
   it("每道题都有原生 Ex 参考", () => {
     for (const t of TAB_TASKS) {
-      const cmd = commandFor(t)!;
+      const cmd = commandFor(t);
+      if (!cmd) continue; // Vim 内建键，见上一条的说明
       expect(cmd.native, `${t.key} 缺原生参考`).toBeTruthy();
     }
   });
 
-  it("解法是 3 键(<Space> + <Tab> + 面板键)", () => {
+  it("LazyVim 系的解法是 3 键(<Space> + <Tab> + 面板键)", () => {
+    /**
+     * ⚠️ 只查 LazyVim 那一族 —— Vim 内建的 `gt` / `gT` / `g<Tab>`
+     * 是 1~2 键、不带 leader，不适用这条断言。
+     */
+    const BUILTIN = new Set(["gt", "gT", "g<Tab>"]);
     for (const t of TAB_TASKS) {
+      if (BUILTIN.has(t.key)) continue;
       const cmd = commandFor(t)!;
       const keys = cmd.display.match(/<[^>]+>|./g) ?? [];
       expect(keys.length, `${t.key} 的键数不对: ${cmd.display}`).toBe(3);
@@ -227,6 +259,7 @@ describe("解法来自真实数据(COMMANDS)", () => {
       expect(keys[1]).toBe("<Tab>");
     }
   });
+
 });
 
 describe("每道题都可解", () => {
@@ -259,5 +292,47 @@ describe("题库前提合法性", () => {
     expect(first.curIndex).toBeGreaterThan(0);
     const last = TAB_TASKS.find((t) => t.key === "<Tab>l")!;
     expect(last.curIndex).toBeLessThan(last.tabs - 1);
+  });
+});
+
+/**
+ * ⚠️⚠️ Vim 内建的等价键**只做标注，不出题** —— 这是用户明确的设计口径。
+ *
+ * > 都是使用 lazyvim 的按键为主，vim 只是在旁边作为标注，增强记忆而已
+ *
+ * 我第一版搞反了：把 `gt` / `gT` / `g<Tab>` 做成了题，还标「这才是最优解」——
+ * 那等于让用户**练 Vim 原生、把 LazyVim 当次解**，方向正好相反。
+ *
+ * 现在它们是 `NATIVE_ALIAS`：练的仍是 `<Space><Tab>]`，旁边标一句
+ * 「Vim 里对应 gt」。
+ */
+describe("Vim 内建等价键：只标注，不出题", () => {
+  it("gt / gT / g<Tab> 不在题库里（它们不是练习题）", () => {
+    const keys = new Set(TAB_TASKS.map((t) => t.key));
+    for (const k of ["gt", "gT", "g<Tab>"]) {
+      expect(keys.has(k), `${k} 不该是题目 —— 练的是 LazyVim 那套键`).toBe(false);
+    }
+  });
+
+  it("但它们作为标注挂在对应的 LazyVim 题上", () => {
+    expect(NATIVE_ALIAS["<Tab>]"]?.[0]?.key).toBe("gt");
+    expect(NATIVE_ALIAS["<Tab>["]?.[0]?.key).toBe("gT");
+    expect(NATIVE_ALIAS["<Tab>l"]?.[0]?.key).toBe("g<Tab>");
+  });
+
+  it("每条标注都指向**真实存在**的题（别挂到不存在的键上）", () => {
+    const keys = new Set(TAB_TASKS.map((t) => t.key));
+    for (const [taskKey, aliases] of Object.entries(NATIVE_ALIAS)) {
+      expect(keys.has(taskKey), `标注挂在不存在的题 ${taskKey} 上`).toBe(true);
+      for (const a of aliases) {
+        expect(a.note.length, `${a.key} 缺说明`).toBeGreaterThan(5);
+      }
+    }
+  });
+
+  it("每道 LazyVim 题的最优解仍是它自己（没被原生键顶掉）", () => {
+    for (const t of TAB_TASKS) {
+      expect(t.key.startsWith("<Tab>"), `${t.key} 该是 LazyVim 系的键`).toBe(true);
+    }
   });
 });

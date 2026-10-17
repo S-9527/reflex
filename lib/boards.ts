@@ -159,7 +159,7 @@ export const BOARDS: Board[] = [
     id: "tabs",
     href: "/tabs",
     name: "标签页",
-    what: "<Tab> 那一族。注意它关的是整个标签页，不是单个 buffer",
+    what: "<Tab> 那一族，加上 Vim 内建的 gt / gT / g<Tab>。注意它关的是整个标签页，不是单个 buffer",
     total: TAB_TASKS.length,
     // ⚠️ tab 键的 group 落在 leader-misc 兜底桶里，没有独立分组
     group: null,
